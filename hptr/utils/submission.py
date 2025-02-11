@@ -8,7 +8,7 @@ import pandas as pd
 from torch import Tensor
 from waymo_open_dataset.protos import motion_submission_pb2
 from pytorch_lightning.loggers import WandbLogger
-from .transform_utils import torch_pos2global, torch_rad2rot
+from hptr.utils.transform_utils import torch_pos2global, torch_rad2rot
 
 # ! single GPU only
 
