@@ -7,7 +7,13 @@ from torch import nn, Tensor
 class ToDict(nn.Module):
     def __init__(self, predictions: List[str]) -> None:
         super().__init__()
-        self.dims = {"pred_pos": None, "pred_spd": None, "pred_vel": None, "pred_yaw_bbox": None, "pred_cov": None}
+        self.dims = {
+            "pred_pos": None,
+            "pred_spd": None,
+            "pred_vel": None,
+            "pred_yaw_bbox": None,
+            "pred_cov": None,
+        }
 
         pred_dim = 0
         if "pos" in predictions:
@@ -67,19 +73,35 @@ class GetCovMat(nn.Module):
             cov_shape = pred_dict["pred_cov"].shape
             cov_dof = cov_shape[-1]
             if cov_dof == 3:
-                a = torch.clamp(pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max).exp()
-                b = torch.clamp(pred_dict["pred_cov"][..., 1], min=self.std_min, max=self.std_max).exp()
-                c = torch.clamp(pred_dict["pred_cov"][..., 2], min=-self.rho_clamp, max=self.rho_clamp)
+                a = torch.clamp(
+                    pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max
+                ).exp()
+                b = torch.clamp(
+                    pred_dict["pred_cov"][..., 1], min=self.std_min, max=self.std_max
+                ).exp()
+                c = torch.clamp(
+                    pred_dict["pred_cov"][..., 2],
+                    min=-self.rho_clamp,
+                    max=self.rho_clamp,
+                )
             elif cov_dof == 2:
-                a = torch.clamp(pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max).exp()
-                b = torch.clamp(pred_dict["pred_cov"][..., 1], min=self.std_min, max=self.std_max).exp()
+                a = torch.clamp(
+                    pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max
+                ).exp()
+                b = torch.clamp(
+                    pred_dict["pred_cov"][..., 1], min=self.std_min, max=self.std_max
+                ).exp()
                 c = torch.zeros_like(a)
             elif cov_dof == 1:
-                a = torch.clamp(pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max).exp()
+                a = torch.clamp(
+                    pred_dict["pred_cov"][..., 0], min=self.std_min, max=self.std_max
+                ).exp()
                 b = a
                 c = torch.zeros_like(a)
 
-            pred_dict["pred_cov"] = torch.stack([a, torch.zeros_like(a), c, b], dim=-1).view(*cov_shape[:-1], 2, 2)
+            pred_dict["pred_cov"] = torch.stack(
+                [a, torch.zeros_like(a), c, b], dim=-1
+            ).view(*cov_shape[:-1], 2, 2)
 
         return pred_dict
 

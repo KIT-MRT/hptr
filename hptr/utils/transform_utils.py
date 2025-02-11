@@ -6,7 +6,9 @@ import transforms3d
 from typing import Union
 
 
-def cast_rad(angle: Union[float, np.ndarray, Tensor]) -> Union[float, np.ndarray, Tensor]:
+def cast_rad(
+    angle: Union[float, np.ndarray, Tensor]
+) -> Union[float, np.ndarray, Tensor]:
     """Cast angle such that they are always in the [-pi, pi) range."""
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
@@ -87,16 +89,22 @@ def transform_points(points: np.ndarray, transf_matrix: np.ndarray) -> np.ndarra
     ), f"transf_matrix ({transf_matrix.shape}) should be a square matrix."
 
     if points.shape[1] not in [2, 3]:
-        raise AssertionError(f"Points input should be (N, 2) or (N, 3) shape, received {points.shape}")
+        raise AssertionError(
+            f"Points input should be (N, 2) or (N, 3) shape, received {points.shape}"
+        )
 
-    assert points.shape[1] == transf_matrix.shape[1] - 1, "points dim should be one less than matrix dim"
+    assert (
+        points.shape[1] == transf_matrix.shape[1] - 1
+    ), "points dim should be one less than matrix dim"
 
     points_transformed = (points @ transf_matrix.T[:-1, :-1]) + transf_matrix[:-1, -1]
 
     return points_transformed.astype(points.dtype)
 
 
-def get_transformation_matrix(agent_translation_m: np.ndarray, agent_yaw: float) -> np.ndarray:
+def get_transformation_matrix(
+    agent_translation_m: np.ndarray, agent_yaw: float
+) -> np.ndarray:
     """Get transformation matrix from world to vehicle frame
 
     Args:
@@ -128,7 +136,9 @@ def torch_rad2rot(rad: Tensor) -> Tensor:
     """
     _cos = torch.cos(rad)
     _sin = torch.sin(rad)
-    return torch.stack([torch.stack([_cos, -_sin], dim=-1), torch.stack([_sin, _cos], dim=-1)], dim=-2)
+    return torch.stack(
+        [torch.stack([_cos, -_sin], dim=-1), torch.stack([_sin, _cos], dim=-1)], dim=-2
+    )
 
 
 def torch_sincos2rot(in_sin: Tensor, in_cos: Tensor) -> Tensor:
@@ -140,7 +150,10 @@ def torch_sincos2rot(in_sin: Tensor, in_cos: Tensor) -> Tensor:
     Returns:
         rot_mat: [{in_sin.shape}, 2, 2]
     """
-    return torch.stack([torch.stack([in_cos, -in_sin], dim=-1), torch.stack([in_sin, in_cos], dim=-1)], dim=-2)
+    return torch.stack(
+        [torch.stack([in_cos, -in_sin], dim=-1), torch.stack([in_sin, in_cos], dim=-1)],
+        dim=-2,
+    )
 
 
 def torch_pos2local(in_pos: Tensor, local_pos: Tensor, local_rot: Tensor) -> Tensor:
@@ -168,7 +181,10 @@ def torch_pos2global(in_pos: Tensor, local_pos: Tensor, local_rot: Tensor) -> Te
     Returns:
         out_pos: [..., M, 2]
     """
-    return torch.matmul(in_pos.double(), local_rot.transpose(-1, -2).double()) + local_pos.double()
+    return (
+        torch.matmul(in_pos.double(), local_rot.transpose(-1, -2).double())
+        + local_pos.double()
+    )
 
 
 def torch_dir2local(in_dir: Tensor, local_rot: Tensor) -> Tensor:

@@ -5,6 +5,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+
 # KNARPE
 class AttentionRPE(nn.Module):
     def __init__(
@@ -112,7 +113,9 @@ class AttentionRPE(nn.Module):
         if attn_invalid_mask is not None:
             mask_no_tgt_valid = attn_invalid_mask.all(-1)
             if mask_no_tgt_valid.any():
-                attn_invalid_mask = attn_invalid_mask & (~mask_no_tgt_valid.unsqueeze(-1))  # to avoid softmax nan
+                attn_invalid_mask = attn_invalid_mask & (
+                    ~mask_no_tgt_valid.unsqueeze(-1)
+                )  # to avoid softmax nan
             else:
                 mask_no_tgt_valid = None
 
@@ -120,18 +123,40 @@ class AttentionRPE(nn.Module):
         if rpe is None:
             if k.dim() == 3:
                 # ! normal attention; q: [n_batch, n_src, d_model], k,v: [n_batch, n_tgt, d_model]
-                q = q.view(n_batch, n_src, self.n_head, self.d_head).transpose(1, 2).contiguous()
-                k = k.view(n_batch, n_tgt, self.n_head, self.d_head).transpose(1, 2).contiguous()
-                v = v.view(n_batch, n_tgt, self.n_head, self.d_head).transpose(1, 2).contiguous()
-                attn = torch.matmul(q, k.transpose(-2, -1))  # [n_batch, n_head, n_src, n_tgt]
+                q = (
+                    q.view(n_batch, n_src, self.n_head, self.d_head)
+                    .transpose(1, 2)
+                    .contiguous()
+                )
+                k = (
+                    k.view(n_batch, n_tgt, self.n_head, self.d_head)
+                    .transpose(1, 2)
+                    .contiguous()
+                )
+                v = (
+                    v.view(n_batch, n_tgt, self.n_head, self.d_head)
+                    .transpose(1, 2)
+                    .contiguous()
+                )
+                attn = torch.matmul(
+                    q, k.transpose(-2, -1)
+                )  # [n_batch, n_head, n_src, n_tgt]
                 # q: [n_batch, n_head, n_src, d_head], k,v: [n_batch, n_head, n_tgt, d_head]
             else:
                 # ! KNN attention; q: [n_batch, n_src, d_model], k,v: [n_batch, n_src, n_tgt, d_model]
                 # k,v: [n_batch, n_src, n_tgt, d_model] -> [n_batch, n_head, n_src, n_tgt_knn, d_head]
-                k = k.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
-                v = v.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
+                k = k.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(
+                    3, 1
+                )
+                v = v.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(
+                    3, 1
+                )
                 # [n_batch, n_src, d_model] -> [n_batch, n_head, n_src, 1, d_head]
-                q = q.view(n_batch, n_src, self.n_head, self.d_head).transpose(1, 2).unsqueeze(3)
+                q = (
+                    q.view(n_batch, n_src, self.n_head, self.d_head)
+                    .transpose(1, 2)
+                    .unsqueeze(3)
+                )
                 attn = torch.sum(q * k, dim=-1)  # [n_batch, n_head, n_src, n_tgt_knn]
         else:
             # ! rpe attention; q: [n_batch, n_src, d_model], k,v: [n_batch, n_tgt, d_model]
@@ -140,17 +165,27 @@ class AttentionRPE(nn.Module):
             k = k.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
             v = v.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
             # [n_batch, n_src, d_model] -> [n_batch, n_head, n_src, 1, d_head]
-            q = q.view(n_batch, n_src, self.n_head, self.d_head).transpose(1, 2).unsqueeze(3)
+            q = (
+                q.view(n_batch, n_src, self.n_head, self.d_head)
+                .transpose(1, 2)
+                .unsqueeze(3)
+            )
 
             # project rpe to rpe_q, rpe_k, rpe_v: [n_batch, n_head, n_src, n_tgt, d_head]
             rpe = self.mlp_rpe(rpe)
             if self.apply_q_rpe:
                 rpe_q, rpe_k, rpe_v = rpe.chunk(3, dim=-1)
-                rpe_q = rpe_q.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
+                rpe_q = rpe_q.view(
+                    n_batch, n_src, n_tgt, self.n_head, self.d_head
+                ).movedim(3, 1)
             else:
                 rpe_k, rpe_v = rpe.chunk(2, dim=-1)
-            rpe_k = rpe_k.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
-            rpe_v = rpe_v.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(3, 1)
+            rpe_k = rpe_k.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(
+                3, 1
+            )
+            rpe_v = rpe_v.view(n_batch, n_src, n_tgt, self.n_head, self.d_head).movedim(
+                3, 1
+            )
 
             # get attn: [n_batch, n_head, n_src, n_tgt]
             if self.apply_q_rpe:
@@ -175,7 +210,9 @@ class AttentionRPE(nn.Module):
             if v.dim() == 4:
                 out = torch.matmul(attn, v)  # v, [n_batch, n_head, n_tgt, d_head]
             else:
-                out = torch.sum(v * attn.unsqueeze(-1), dim=3)  # v: [n_batch, n_head, n_src, n_tgt, d_head]
+                out = torch.sum(
+                    v * attn.unsqueeze(-1), dim=3
+                )  # v: [n_batch, n_head, n_src, n_tgt, d_head]
         else:
             # v, rpe_v: [n_batch, n_head, n_src, n_tgt, d_head]
             out = torch.sum((v + rpe_v) * attn.unsqueeze(-1), dim=3)
@@ -191,7 +228,9 @@ class AttentionRPE(nn.Module):
         if need_weights:
             attn_weights = attn.mean(1)  # [n_batch, n_src, n_tgt]
             if mask_no_tgt_valid is not None:
-                attn_weights = attn_weights.masked_fill(mask_no_tgt_valid.unsqueeze(-1), 0)
+                attn_weights = attn_weights.masked_fill(
+                    mask_no_tgt_valid.unsqueeze(-1), 0
+                )
             return out, attn_weights
         else:
             return out, None

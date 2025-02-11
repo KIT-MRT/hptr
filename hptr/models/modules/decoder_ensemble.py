@@ -14,14 +14,20 @@ class DecoderEnsemble(nn.Module):
         self.use_vmap = decoder_cfg["use_vmap"]
         self.n_decoders = n_decoders
         if self.use_vmap and self.n_decoders > 1:
-            _decoders = [hydra.utils.instantiate(decoder_cfg) for _ in range(n_decoders)]
-            fmodel_decoders, params_decoders, buffers_decoders = combine_state_for_ensemble(_decoders)
+            _decoders = [
+                hydra.utils.instantiate(decoder_cfg) for _ in range(n_decoders)
+            ]
+            fmodel_decoders, params_decoders, buffers_decoders = (
+                combine_state_for_ensemble(_decoders)
+            )
             assert buffers_decoders == ()
             self.v_model = vmap(fmodel_decoders, randomness="different")
             [p.requires_grad_() for p in params_decoders]
             self.params_decoders = nn.ParameterList(params_decoders)
         else:
-            self._decoders = nn.ModuleList([hydra.utils.instantiate(decoder_cfg) for _ in range(n_decoders)])
+            self._decoders = nn.ModuleList(
+                [hydra.utils.instantiate(decoder_cfg) for _ in range(n_decoders)]
+            )
 
     def forward(self, **kwargs) -> Tuple[Tensor, Tensor]:
         """
@@ -87,12 +93,18 @@ class MLPHead(nn.Module):
             "use_batchnorm": out_mlp_batchnorm,
         }
         n_mlp_head = 3 if use_agent_type else 1
-        self.mlp_pred = MLPEnsemble(n_decoders=n_mlp_head, decoder_cfg=cfg_mlp_pred, use_vmap=use_vmap)
+        self.mlp_pred = MLPEnsemble(
+            n_decoders=n_mlp_head, decoder_cfg=cfg_mlp_pred, use_vmap=use_vmap
+        )
 
         cfg_mlp_conf["fc_dims"] = [hidden_dim, _d, _d, 1]
-        self.mlp_conf = MLPEnsemble(n_decoders=n_mlp_head, decoder_cfg=cfg_mlp_conf, use_vmap=use_vmap)
+        self.mlp_conf = MLPEnsemble(
+            n_decoders=n_mlp_head, decoder_cfg=cfg_mlp_conf, use_vmap=use_vmap
+        )
 
-    def forward(self, valid: Tensor, emb: Tensor, agent_type: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(
+        self, valid: Tensor, emb: Tensor, agent_type: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """
         Args:
             valid: [n_scene, n_agent]
@@ -103,8 +115,12 @@ class MLPHead(nn.Module):
             conf: [n_scene, n_agent, n_pred]
             pred: [n_scene, n_agent, n_pred, n_step_future, pred_dim]
         """
-        pred = self.mlp_pred(x=emb, valid_mask=valid.unsqueeze(-1))  # [1/3, n_scene, n_agent, n_pred, 400]
-        conf = self.mlp_conf(x=emb, valid_mask=valid.unsqueeze(-1)).squeeze(-1)  # [1/3, n_scene, n_agent, n_pred]
+        pred = self.mlp_pred(
+            x=emb, valid_mask=valid.unsqueeze(-1)
+        )  # [1/3, n_scene, n_agent, n_pred, 400]
+        conf = self.mlp_conf(x=emb, valid_mask=valid.unsqueeze(-1)).squeeze(
+            -1
+        )  # [1/3, n_scene, n_agent, n_pred]
 
         if self.use_agent_type:
             _type = agent_type.movedim(-1, 0).unsqueeze(-1)  # [3, n_scene, n_agent, 1]
@@ -115,23 +131,31 @@ class MLPHead(nn.Module):
             conf = conf.squeeze(0)
 
         n_scene, n_agent, n_pred = conf.shape
-        return conf, pred.view(n_scene, n_agent, n_pred, self.n_step_future, self.pred_dim)
+        return conf, pred.view(
+            n_scene, n_agent, n_pred, self.n_step_future, self.pred_dim
+        )
 
 
 class MLPEnsemble(nn.Module):
-    def __init__(self, n_decoders: int, decoder_cfg: DictConfig, use_vmap: bool) -> None:
+    def __init__(
+        self, n_decoders: int, decoder_cfg: DictConfig, use_vmap: bool
+    ) -> None:
         super().__init__()
         self.use_vmap = use_vmap
         self.n_decoders = n_decoders
         if self.use_vmap and self.n_decoders > 1:
             _decoders = [MLP(**decoder_cfg) for _ in range(n_decoders)]
-            fmodel_decoders, params_decoders, buffers_decoders = combine_state_for_ensemble(_decoders)
+            fmodel_decoders, params_decoders, buffers_decoders = (
+                combine_state_for_ensemble(_decoders)
+            )
             assert buffers_decoders == ()
             self.v_model = vmap(fmodel_decoders, randomness="different")
             [p.requires_grad_() for p in params_decoders]
             self.params_decoders = nn.ParameterList(params_decoders)
         else:
-            self._decoders = nn.ModuleList([MLP(**decoder_cfg) for _ in range(n_decoders)])
+            self._decoders = nn.ModuleList(
+                [MLP(**decoder_cfg) for _ in range(n_decoders)]
+            )
 
     def forward(self, **kwargs) -> Tensor:
         if self.use_vmap and self.n_decoders > 1:

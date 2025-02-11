@@ -3,7 +3,13 @@ import hydra
 import torch
 from omegaconf import DictConfig
 from typing import List
-from pytorch_lightning import seed_everything, LightningDataModule, LightningModule, Trainer, Callback
+from pytorch_lightning import (
+    seed_everything,
+    LightningDataModule,
+    LightningModule,
+    Trainer,
+    Callback,
+)
 from pytorch_lightning.loggers import LightningLoggerBase
 import os
 
@@ -40,7 +46,9 @@ def main(config: DictConfig) -> None:
         modelClass = hydra.utils.get_class(config.model._target_)
 
         model = modelClass.load_from_checkpoint(
-            ckpt_path, wb_artifact=config.resume.checkpoint, **config.resume.model_overrides
+            ckpt_path,
+            wb_artifact=config.resume.checkpoint,
+            **config.resume.model_overrides
         )
 
         if config.resume.resume_trainer and config.action == "fit":
@@ -52,7 +60,11 @@ def main(config: DictConfig) -> None:
     if torch.cuda.device_count() > 1:
         strategy = "ddp"
     trainer: Trainer = hydra.utils.instantiate(
-        config.trainer, strategy=strategy, callbacks=callbacks, logger=loggers, _convert_="partial"
+        config.trainer,
+        strategy=strategy,
+        callbacks=callbacks,
+        logger=loggers,
+        _convert_="partial",
     )
     if config.action == "fit":
         trainer.fit(model=model, datamodule=datamodule)

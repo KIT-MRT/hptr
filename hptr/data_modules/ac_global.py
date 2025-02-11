@@ -18,7 +18,9 @@ class AgentCentricGlobal(nn.Module):
         pose_pe: DictConfig,
     ) -> None:
         super().__init__()
-        self.dropout_p_history = dropout_p_history  # [0, 1], turn off if set to negative
+        self.dropout_p_history = (
+            dropout_p_history  # [0, 1], turn off if set to negative
+        )
         self.step_current = time_step_current
         self.n_step_hist = time_step_current + 1
         self.use_current_tl = use_current_tl
@@ -42,7 +44,11 @@ class AgentCentricGlobal(nn.Module):
                 + data_size["agent/type"][-1]  # 3
                 + self.n_step_hist  # valid
             )
-            map_attr_dim = self.pose_pe_map.out_dim * self.n_pl_node + data_size["map/type"][-1] + self.n_pl_node
+            map_attr_dim = (
+                self.pose_pe_map.out_dim * self.n_pl_node
+                + data_size["map/type"][-1]
+                + self.n_pl_node
+            )
         else:
             agent_attr_dim = (
                 self.pose_pe_agent.out_dim
@@ -153,53 +159,91 @@ class AgentCentricGlobal(nn.Module):
                     "input/tl_attr": [n_scene, n_target, n_step_hist, n_tl, tl_attr_dim]
         """
         batch["input/target_type"] = batch["ac/target_type"]
-        valid = batch["ac/target_valid"][:, :, [self.step_current]].unsqueeze(-1)  # [n_scene, n_target, 1, 1]
-        batch["input/target_valid"] = batch["ac/target_valid"]  # [n_scene, n_target, n_step_hist]
-        batch["input/other_valid"] = batch["ac/other_valid"] & valid  # [n_scene, n_target, n_other, n_step_hist]
-        batch["input/tl_valid"] = batch["ac/tl_valid"] & valid  # [n_scene, n_target, n_step_hist, n_tl]
-        batch["input/map_valid"] = batch["ac/map_valid"] & valid  # [n_scene, n_target, n_map, n_pl_node]
+        valid = batch["ac/target_valid"][:, :, [self.step_current]].unsqueeze(
+            -1
+        )  # [n_scene, n_target, 1, 1]
+        batch["input/target_valid"] = batch[
+            "ac/target_valid"
+        ]  # [n_scene, n_target, n_step_hist]
+        batch["input/other_valid"] = (
+            batch["ac/other_valid"] & valid
+        )  # [n_scene, n_target, n_other, n_step_hist]
+        batch["input/tl_valid"] = (
+            batch["ac/tl_valid"] & valid
+        )  # [n_scene, n_target, n_step_hist, n_tl]
+        batch["input/map_valid"] = (
+            batch["ac/map_valid"] & valid
+        )  # [n_scene, n_target, n_map, n_pl_node]
 
         # ! randomly mask history target/other/tl
         if self.training and (0 < self.dropout_p_history <= 1.0):
-            prob_mask = torch.ones_like(batch["input/target_valid"][..., :-1]) * (1 - self.dropout_p_history)
+            prob_mask = torch.ones_like(batch["input/target_valid"][..., :-1]) * (
+                1 - self.dropout_p_history
+            )
             batch["input/target_valid"][..., :-1] &= torch.bernoulli(prob_mask).bool()
-            prob_mask = torch.ones_like(batch["input/other_valid"]) * (1 - self.dropout_p_history)
+            prob_mask = torch.ones_like(batch["input/other_valid"]) * (
+                1 - self.dropout_p_history
+            )
             batch["input/other_valid"] &= torch.bernoulli(prob_mask).bool()
-            prob_mask = torch.ones_like(batch["input/tl_valid"]) * (1 - self.dropout_p_history)
+            prob_mask = torch.ones_like(batch["input/tl_valid"]) * (
+                1 - self.dropout_p_history
+            )
             batch["input/tl_valid"] &= torch.bernoulli(prob_mask).bool()
-            prob_mask = torch.ones_like(batch["input/map_valid"]) * (1 - self.dropout_p_history)
+            prob_mask = torch.ones_like(batch["input/map_valid"]) * (
+                1 - self.dropout_p_history
+            )
             batch["input/map_valid"] &= torch.bernoulli(prob_mask).bool()
 
         # ! prepare "input/target_attr"
         if self.pl_aggr:  # [n_scene, n_target, agent_attr_dim]
-            target_invalid = ~batch["input/target_valid"].unsqueeze(-1)  # [n_scene, n_target, n_step_hist, 1]
+            target_invalid = ~batch["input/target_valid"].unsqueeze(
+                -1
+            )  # [n_scene, n_target, n_step_hist, 1]
             target_invalid_reduced = target_invalid.all(-2)  # [n_scene, n_target, 1]
             batch["input/target_attr"] = torch.cat(
                 [
-                    self.pose_pe_agent(batch["ac/target_pos"], batch["ac/target_yaw_bbox"])
+                    self.pose_pe_agent(
+                        batch["ac/target_pos"], batch["ac/target_yaw_bbox"]
+                    )
                     .masked_fill(target_invalid, 0)
                     .flatten(-2, -1),
-                    batch["ac/target_vel"].masked_fill(target_invalid, 0).flatten(-2, -1),  # n_step_hist*2
-                    batch["ac/target_spd"].masked_fill(target_invalid, 0).squeeze(-1),  # n_step_hist
-                    batch["ac/target_yaw_rate"].masked_fill(target_invalid, 0).squeeze(-1),  # n_step_hist
-                    batch["ac/target_acc"].masked_fill(target_invalid, 0).squeeze(-1),  # n_step_hist
+                    batch["ac/target_vel"]
+                    .masked_fill(target_invalid, 0)
+                    .flatten(-2, -1),  # n_step_hist*2
+                    batch["ac/target_spd"]
+                    .masked_fill(target_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
+                    batch["ac/target_yaw_rate"]
+                    .masked_fill(target_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
+                    batch["ac/target_acc"]
+                    .masked_fill(target_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
                     batch["ac/target_size"].masked_fill(target_invalid_reduced, 0),  # 3
                     batch["ac/target_type"].masked_fill(target_invalid_reduced, 0),  # 3
                     batch["input/target_valid"],  # n_step_hist
                 ],
                 dim=-1,
             )
-            batch["input/target_valid"] = batch["input/target_valid"].any(-1)  # [n_scene, n_target]
+            batch["input/target_valid"] = batch["input/target_valid"].any(
+                -1
+            )  # [n_scene, n_target]
         else:  # [n_scene, n_target, n_step_hist, agent_attr_dim]
             batch["input/target_attr"] = torch.cat(
                 [
-                    self.pose_pe_agent(batch["ac/target_pos"], batch["ac/target_yaw_bbox"]),
+                    self.pose_pe_agent(
+                        batch["ac/target_pos"], batch["ac/target_yaw_bbox"]
+                    ),
                     batch["ac/target_vel"],  # vel xy, 2
                     batch["ac/target_spd"],  # speed, 1
                     batch["ac/target_yaw_rate"],  # yaw rate, 1
                     batch["ac/target_acc"],  # acc, 1
-                    batch["ac/target_size"].unsqueeze(-2).expand(-1, -1, self.n_step_hist, -1),  # 3
-                    batch["ac/target_type"].unsqueeze(-2).expand(-1, -1, self.n_step_hist, -1),  # 3
+                    batch["ac/target_size"]
+                    .unsqueeze(-2)
+                    .expand(-1, -1, self.n_step_hist, -1),  # 3
+                    batch["ac/target_type"]
+                    .unsqueeze(-2)
+                    .expand(-1, -1, self.n_step_hist, -1),  # 3
                 ],
                 dim=-1,
             )
@@ -210,30 +254,48 @@ class AgentCentricGlobal(nn.Module):
             other_invalid_reduced = other_invalid.all(-2)
             batch["input/other_attr"] = torch.cat(
                 [
-                    self.pose_pe_agent(batch["ac/other_pos"], batch["ac/other_yaw_bbox"])
+                    self.pose_pe_agent(
+                        batch["ac/other_pos"], batch["ac/other_yaw_bbox"]
+                    )
                     .masked_fill(other_invalid, 0)
                     .flatten(-2, -1),
-                    batch["ac/other_vel"].masked_fill(other_invalid, 0).flatten(-2, -1),  # n_step_hist*2
-                    batch["ac/other_spd"].masked_fill(other_invalid, 0).squeeze(-1),  # n_step_hist
-                    batch["ac/other_yaw_rate"].masked_fill(other_invalid, 0).squeeze(-1),  # n_step_hist
-                    batch["ac/other_acc"].masked_fill(other_invalid, 0).squeeze(-1),  # n_step_hist
+                    batch["ac/other_vel"]
+                    .masked_fill(other_invalid, 0)
+                    .flatten(-2, -1),  # n_step_hist*2
+                    batch["ac/other_spd"]
+                    .masked_fill(other_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
+                    batch["ac/other_yaw_rate"]
+                    .masked_fill(other_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
+                    batch["ac/other_acc"]
+                    .masked_fill(other_invalid, 0)
+                    .squeeze(-1),  # n_step_hist
                     batch["ac/other_size"].masked_fill(other_invalid_reduced, 0),  # 3
                     batch["ac/other_type"].masked_fill(other_invalid_reduced, 0),  # 3
                     batch["input/other_valid"],  # n_step_hist
                 ],
                 dim=-1,
             )
-            batch["input/other_valid"] = batch["input/other_valid"].any(-1)  # [n_scene, n_target, n_other]
+            batch["input/other_valid"] = batch["input/other_valid"].any(
+                -1
+            )  # [n_scene, n_target, n_other]
         else:  # [n_scene, n_target, n_other, n_step_hist, agent_attr_dim]
             batch["input/other_attr"] = torch.cat(
                 [
-                    self.pose_pe_agent(batch["ac/other_pos"], batch["ac/other_yaw_bbox"]),
+                    self.pose_pe_agent(
+                        batch["ac/other_pos"], batch["ac/other_yaw_bbox"]
+                    ),
                     batch["ac/other_vel"],  # vel xy, 2
                     batch["ac/other_spd"],  # speed, 1
                     batch["ac/other_yaw_rate"],  # yaw rate, 1
                     batch["ac/other_acc"],  # acc, 1
-                    batch["ac/other_size"].unsqueeze(-2).expand(-1, -1, -1, self.n_step_hist, -1),  # 3
-                    batch["ac/other_type"].unsqueeze(-2).expand(-1, -1, -1, self.n_step_hist, -1),  # 3
+                    batch["ac/other_size"]
+                    .unsqueeze(-2)
+                    .expand(-1, -1, -1, self.n_step_hist, -1),  # 3
+                    batch["ac/other_type"]
+                    .unsqueeze(-2)
+                    .expand(-1, -1, -1, self.n_step_hist, -1),  # 3
                 ],
                 dim=-1,
             )
@@ -247,17 +309,25 @@ class AgentCentricGlobal(nn.Module):
                     self.pose_pe_map(batch["ac/map_pos"], batch["ac/map_dir"])
                     .masked_fill(map_invalid, 0)
                     .flatten(-2, -1),
-                    batch["ac/map_type"].masked_fill(map_invalid_reduced, 0),  # n_map_type
+                    batch["ac/map_type"].masked_fill(
+                        map_invalid_reduced, 0
+                    ),  # n_map_type
                     batch["input/map_valid"],  # n_pl_node
                 ],
                 dim=-1,
             )
-            batch["input/map_valid"] = batch["input/map_valid"].any(-1)  # [n_scene, n_target, n_map]
+            batch["input/map_valid"] = batch["input/map_valid"].any(
+                -1
+            )  # [n_scene, n_target, n_map]
         else:  # [n_scene, n_target, n_map, n_pl_node, map_attr_dim]
             batch["input/map_attr"] = torch.cat(
                 [
-                    self.pose_pe_map(batch["ac/map_pos"], batch["ac/map_dir"]),  # pl_dim
-                    batch["ac/map_type"].unsqueeze(-2).expand(-1, -1, -1, self.n_pl_node, -1),  # n_map_type
+                    self.pose_pe_map(
+                        batch["ac/map_pos"], batch["ac/map_dir"]
+                    ),  # pl_dim
+                    batch["ac/map_type"]
+                    .unsqueeze(-2)
+                    .expand(-1, -1, -1, self.n_pl_node, -1),  # n_map_type
                 ],
                 dim=-1,
             )
@@ -271,8 +341,12 @@ class AgentCentricGlobal(nn.Module):
             tl_pos = tl_pos[:, :, [-1]]  # [n_scene, n_target, 1, n_tl, 2]
             tl_dir = tl_dir[:, :, [-1]]  # [n_scene, n_target, 1, n_tl, 2]
             tl_state = tl_state[:, :, [-1]]  # [n_scene, n_target, 1, n_tl, 5]
-            batch["input/tl_valid"] = batch["input/tl_valid"][:, :, [-1]]  # [n_scene, n_target, 1, n_tl]
-        batch["input/tl_attr"] = torch.cat([self.pose_pe_tl(tl_pos, tl_dir), tl_state], dim=-1)
+            batch["input/tl_valid"] = batch["input/tl_valid"][
+                :, :, [-1]
+            ]  # [n_scene, n_target, 1, n_tl]
+        batch["input/tl_attr"] = torch.cat(
+            [self.pose_pe_tl(tl_pos, tl_dir), tl_state], dim=-1
+        )
 
         # ! add one-hot encoding for sequence (temporal, order of polyline nodes)
         if self.add_ohe:
@@ -282,21 +356,27 @@ class AgentCentricGlobal(nn.Module):
                 batch["input/target_attr"] = torch.cat(
                     [
                         batch["input/target_attr"],
-                        self.history_step_ohe[None, None, :, :].expand(n_scene, n_target, -1, -1),
+                        self.history_step_ohe[None, None, :, :].expand(
+                            n_scene, n_target, -1, -1
+                        ),
                     ],
                     dim=-1,
                 )
                 batch["input/other_attr"] = torch.cat(
                     [
                         batch["input/other_attr"],
-                        self.history_step_ohe[None, None, None, :, :].expand(n_scene, n_target, n_other, -1, -1),
+                        self.history_step_ohe[None, None, None, :, :].expand(
+                            n_scene, n_target, n_other, -1, -1
+                        ),
                     ],
                     dim=-1,
                 )
                 batch["input/map_attr"] = torch.cat(
                     [
                         batch["input/map_attr"],
-                        self.pl_node_ohe[None, None, None, :, :].expand(n_scene, n_target, n_map, -1, -1),
+                        self.pl_node_ohe[None, None, None, :, :].expand(
+                            n_scene, n_target, n_map, -1, -1
+                        ),
                     ],
                     dim=-1,
                 )
@@ -306,7 +386,9 @@ class AgentCentricGlobal(nn.Module):
                 batch["input/tl_attr"] = torch.cat(
                     [
                         batch["input/tl_attr"],
-                        self.history_step_ohe[None, None, :, None, :].expand(n_scene, n_target, -1, n_tl, -1),
+                        self.history_step_ohe[None, None, :, None, :].expand(
+                            n_scene, n_target, -1, n_tl, -1
+                        ),
                     ],
                     dim=-1,
                 )

@@ -124,29 +124,47 @@ class TransformerCrossAttention(nn.Module):
         self.decoder_self_attn = decoder_self_attn
         inplace = False
 
-        self.dropout = nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+        self.dropout = (
+            nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+        )
         self.activation = _get_activation_fn(activation)
         self.norm1 = nn.LayerNorm(d_model)
 
         if self.decoder_self_attn:
             self.attn_src = AttentionRPE(
-                d_model=d_model, n_head=n_head, dropout_p=dropout_p, bias=bias, d_rpe=d_rpe, apply_q_rpe=apply_q_rpe
+                d_model=d_model,
+                n_head=n_head,
+                dropout_p=dropout_p,
+                bias=bias,
+                d_rpe=d_rpe,
+                apply_q_rpe=apply_q_rpe,
             )
             self.norm_src = nn.LayerNorm(d_model)
-            self.dropout_src = nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+            self.dropout_src = (
+                nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+            )
 
         if self.norm_first:
             self.norm_tgt = nn.LayerNorm(d_model)
 
         self.attn = AttentionRPE(
-            d_model=d_model, n_head=n_head, dropout_p=dropout_p, bias=bias, d_rpe=d_rpe, apply_q_rpe=apply_q_rpe
+            d_model=d_model,
+            n_head=n_head,
+            dropout_p=dropout_p,
+            bias=bias,
+            d_rpe=d_rpe,
+            apply_q_rpe=apply_q_rpe,
         )
         if self.d_feedforward > 0:
             self.linear1 = nn.Linear(d_model, d_feedforward)
             self.linear2 = nn.Linear(d_feedforward, d_model)
             self.norm2 = nn.LayerNorm(d_model)
-            self.dropout1 = nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
-            self.dropout2 = nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+            self.dropout1 = (
+                nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+            )
+            self.dropout2 = (
+                nn.Dropout(p=dropout_p, inplace=inplace) if dropout_p > 0 else None
+            )
 
     def forward(
         self,
@@ -188,7 +206,12 @@ class TransformerCrossAttention(nn.Module):
                     _s = self.attn_src(_s, tgt_padding_mask=src_padding_mask)[0]
                 else:
                     decoder_tgt = self.norm_src(decoder_tgt)
-                    _s = self.attn_src(_s, decoder_tgt, tgt_padding_mask=decoder_tgt_padding_mask, rpe=decoder_rpe)[0]
+                    _s = self.attn_src(
+                        _s,
+                        decoder_tgt,
+                        tgt_padding_mask=decoder_tgt_padding_mask,
+                        rpe=decoder_rpe,
+                    )[0]
 
                 if self.dropout_src is None:
                     src = src + _s
@@ -198,7 +221,12 @@ class TransformerCrossAttention(nn.Module):
                 if decoder_tgt is None:
                     _s = self.attn_src(src, tgt_padding_mask=src_padding_mask)[0]
                 else:
-                    _s = self.attn_src(src, decoder_tgt, tgt_padding_mask=decoder_tgt_padding_mask, rpe=decoder_rpe)[0]
+                    _s = self.attn_src(
+                        src,
+                        decoder_tgt,
+                        tgt_padding_mask=decoder_tgt_padding_mask,
+                        rpe=decoder_rpe,
+                    )[0]
 
                 if self.dropout_src is None:
                     src = self.norm_src(src + _s)

@@ -57,7 +57,9 @@ class WaymoPostProcessing(nn.Module):
             return pred_dict
 
         trajs = pred_dict["pred_pos"].movedim(0, 2).flatten(2, 3)
-        scores = pred_dict["pred_conf"].softmax(-1).movedim(0, 2).flatten(2, 3)  # [n_scene, n_agent, n_decoder*n_pred]
+        scores = (
+            pred_dict["pred_conf"].softmax(-1).movedim(0, 2).flatten(2, 3)
+        )  # [n_scene, n_agent, n_decoder*n_pred]
         scores = scores / scores.sum(-1, keepdim=True)  # normalized to prob
         n_scene, n_agent, n_pred, n_step, _ = trajs.shape
         assert n_pred == self.k_pred
@@ -76,7 +78,12 @@ class WaymoPostProcessing(nn.Module):
         # ! manually scale scores if necessary: [n_scene, n_agent, n_pred]
         if len(self.mpa_nms_thresh) > 0:
             scores = self.mpa_nms(
-                pred_dict["pred_valid"], trajs, scores, self.mpa_nms_thresh, self.use_ade, pred_dict["ref_type"]
+                pred_dict["pred_valid"],
+                trajs,
+                scores,
+                self.mpa_nms_thresh,
+                self.use_ade,
+                pred_dict["ref_type"],
             )
         if self.score_temperature > 0:
             scores = torch.softmax(torch.log(scores) / self.score_temperature, dim=-1)
@@ -84,7 +91,9 @@ class WaymoPostProcessing(nn.Module):
         # ! transform trajs to global coordinate (same as the gt saved in batch)
         if self.gt_in_local:
             # [n_scene, n_agent, n_pred*n_step, 2]
-            trajs = torch_pos2global(trajs.flatten(2, 3), pred_dict["ref_pos"], pred_dict["ref_rot"])
+            trajs = torch_pos2global(
+                trajs.flatten(2, 3), pred_dict["ref_pos"], pred_dict["ref_rot"]
+            )
             # [n_scene, n_agent, n_pred, n_step, 2]
             trajs = trajs.view(n_scene, n_agent, self.k_pred, n_step, 2)
 
@@ -92,30 +101,50 @@ class WaymoPostProcessing(nn.Module):
             # ! ref_idx is not None in case of agent-centric, fill n_target to n_agent
             scene_indices = torch.arange(n_scene).unsqueeze(1)
             waymo_trajs = torch.zeros(
-                [n_scene, pred_dict["ref_idx_n"], self.k_pred, n_step, 2], device=trajs.device, dtype=trajs.dtype
+                [n_scene, pred_dict["ref_idx_n"], self.k_pred, n_step, 2],
+                device=trajs.device,
+                dtype=trajs.dtype,
             )
             waymo_trajs[scene_indices, pred_dict["ref_idx"]] = trajs
-            waymo_trajs = waymo_trajs.movedim(3, 1)  # [n_scene, n_step, n_agent, k_pred, 2]
+            waymo_trajs = waymo_trajs.movedim(
+                3, 1
+            )  # [n_scene, n_step, n_agent, k_pred, 2]
 
             waymo_scores = torch.zeros(
-                [n_scene, pred_dict["ref_idx_n"], self.k_pred], device=trajs.device, dtype=trajs.dtype
+                [n_scene, pred_dict["ref_idx_n"], self.k_pred],
+                device=trajs.device,
+                dtype=trajs.dtype,
             )
-            waymo_scores[scene_indices, pred_dict["ref_idx"]] = scores.double()  # [n_scene, n_agent, k_pred]
+            waymo_scores[scene_indices, pred_dict["ref_idx"]] = (
+                scores.double()
+            )  # [n_scene, n_agent, k_pred]
 
-            waymo_valid = torch.zeros([n_scene, pred_dict["ref_idx_n"]], device=trajs.device, dtype=torch.bool)
-            waymo_valid[scene_indices, pred_dict["ref_idx"]] = pred_dict["pred_valid"].squeeze(-1)
-            waymo_valid = waymo_valid.unsqueeze(1).expand(-1, n_step, -1)  # [n_scene, n_step, n_agent]
+            waymo_valid = torch.zeros(
+                [n_scene, pred_dict["ref_idx_n"]], device=trajs.device, dtype=torch.bool
+            )
+            waymo_valid[scene_indices, pred_dict["ref_idx"]] = pred_dict[
+                "pred_valid"
+            ].squeeze(-1)
+            waymo_valid = waymo_valid.unsqueeze(1).expand(
+                -1, n_step, -1
+            )  # [n_scene, n_step, n_agent]
         else:
             waymo_trajs = trajs.movedim(3, 1)  # [n_scene, n_step, n_agent, k_pred, 2]
             waymo_scores = scores.double()  # [n_scene, n_agent, k_pred]
-            waymo_valid = pred_dict["pred_valid"].unsqueeze(1).expand(-1, n_step, -1)  # [n_scene, n_step, n_agent]
+            waymo_valid = (
+                pred_dict["pred_valid"].unsqueeze(1).expand(-1, n_step, -1)
+            )  # [n_scene, n_step, n_agent]
 
         if pred_dict["pred_yaw_bbox"] is not None:
             yaw_bbox = pred_dict["pred_yaw_bbox"].movedim(0, 2).flatten(2, 3)
             if self.gt_in_local:
-                yaw_bbox = torch_rad2global(yaw_bbox.flatten(2, 4), pred_dict["ref_yaw"].squeeze(-1))
+                yaw_bbox = torch_rad2global(
+                    yaw_bbox.flatten(2, 4), pred_dict["ref_yaw"].squeeze(-1)
+                )
                 yaw_bbox = yaw_bbox.view(n_scene, n_agent, self.k_pred, n_step, 1)
-            pred_dict["waymo_yaw_bbox"] = yaw_bbox.movedim(3, 1)  # [n_scene, n_step, n_agent, k_pred, 2]
+            pred_dict["waymo_yaw_bbox"] = yaw_bbox.movedim(
+                3, 1
+            )  # [n_scene, n_step, n_agent, k_pred, 2]
 
         else:
             pred_dict["waymo_yaw_bbox"] = None
@@ -127,7 +156,12 @@ class WaymoPostProcessing(nn.Module):
 
     @staticmethod
     def mpa_nms(
-        valid: Tensor, trajs: Tensor, scores: Tensor, type_thresh: List[float], use_ade: bool, agent_type: Tensor
+        valid: Tensor,
+        trajs: Tensor,
+        scores: Tensor,
+        type_thresh: List[float],
+        use_ade: bool,
+        agent_type: Tensor,
     ) -> Tensor:
         """
         Args:
@@ -147,9 +181,17 @@ class WaymoPostProcessing(nn.Module):
         thresh = thresh[:, :, None, None]  # [n_scene, n_agent, 1, 1]
         # within_dist: [n_scene, n_agent, n_pred, n_pred]
         if use_ade:
-            within_dist = (torch.norm(trajs.unsqueeze(2) - trajs.unsqueeze(3), dim=-1).mean(-1)) < thresh
+            within_dist = (
+                torch.norm(trajs.unsqueeze(2) - trajs.unsqueeze(3), dim=-1).mean(-1)
+            ) < thresh
         else:
-            within_dist = torch.norm(trajs[:, :, :, -1].unsqueeze(2) - trajs[:, :, :, -1].unsqueeze(3), dim=-1) < thresh
+            within_dist = (
+                torch.norm(
+                    trajs[:, :, :, -1].unsqueeze(2) - trajs[:, :, :, -1].unsqueeze(3),
+                    dim=-1,
+                )
+                < thresh
+            )
 
         # ! dynamic thresh 1: [n_scene, n_agent, 1, 1]
         # thresh = (thresh * (dist.flatten(2, 3).mean(-1)))[:, :, None, None]

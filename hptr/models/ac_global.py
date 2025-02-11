@@ -37,7 +37,10 @@ class Decoder(nn.Module):
         if self.n_layer_tf_all2all > 0:
             if self.n_latent_query > 0:
                 self.latent_query = MultiModalAnchors(
-                    hidden_dim=hidden_dim, emb_dim=hidden_dim, n_pred=self.n_latent_query, **latent_query
+                    hidden_dim=hidden_dim,
+                    emb_dim=hidden_dim,
+                    n_pred=self.n_latent_query,
+                    **latent_query,
                 )
                 if self.latent_query_use_tf_decoder:
                     self.tf_latent_query = TransformerBlock(
@@ -49,18 +52,30 @@ class Decoder(nn.Module):
                     )
                 else:
                     self.tf_latent_cross = TransformerBlock(
-                        d_model=hidden_dim, d_feedforward=hidden_dim * 4, n_layer=1, **tf_cfg
+                        d_model=hidden_dim,
+                        d_feedforward=hidden_dim * 4,
+                        n_layer=1,
+                        **tf_cfg,
                     )
                     self.tf_latent_self = TransformerBlock(
-                        d_model=hidden_dim, d_feedforward=hidden_dim * 4, n_layer=n_layer_tf_all2all, **tf_cfg
+                        d_model=hidden_dim,
+                        d_feedforward=hidden_dim * 4,
+                        n_layer=n_layer_tf_all2all,
+                        **tf_cfg,
                     )
             else:
                 self.tf_self_attn = TransformerBlock(
-                    d_model=hidden_dim, d_feedforward=hidden_dim * 4, n_layer=n_layer_tf_all2all, **tf_cfg
+                    d_model=hidden_dim,
+                    d_feedforward=hidden_dim * 4,
+                    n_layer=n_layer_tf_all2all,
+                    **tf_cfg,
                 )
 
         self.anchors = MultiModalAnchors(
-            hidden_dim=hidden_dim, emb_dim=hidden_dim, n_pred=n_pred, **multi_modal_anchors
+            hidden_dim=hidden_dim,
+            emb_dim=hidden_dim,
+            n_pred=n_pred,
+            **multi_modal_anchors,
         )
         self.tf_anchor = TransformerBlock(
             d_model=hidden_dim,
@@ -69,9 +84,13 @@ class Decoder(nn.Module):
             decoder_self_attn=anchor_self_attn,
             **tf_cfg,
         )
-        self.mlp_head = MLPHead(hidden_dim=hidden_dim, use_vmap=use_vmap, n_pred=n_pred, **mlp_head)
+        self.mlp_head = MLPHead(
+            hidden_dim=hidden_dim, use_vmap=use_vmap, n_pred=n_pred, **mlp_head
+        )
 
-    def forward(self, valid: Tensor, target_type: Tensor, emb: Tensor, emb_invalid: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(
+        self, valid: Tensor, target_type: Tensor, emb: Tensor, emb_invalid: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """
         Args:
             valid: [n_scene, n_target]
@@ -86,15 +105,25 @@ class Decoder(nn.Module):
         if self.n_layer_tf_all2all > 0:  # ! all2all attention
             if self.n_latent_query > 0:  # all2all attention with latent query
                 # [n_scene*n_agent, n_latent_query, out_dim]
-                lq_emb = self.latent_query(valid.flatten(0, 1), None, target_type.flatten(0, 1))
+                lq_emb = self.latent_query(
+                    valid.flatten(0, 1), None, target_type.flatten(0, 1)
+                )
                 if self.latent_query_use_tf_decoder:
-                    emb, _ = self.tf_latent_query(src=lq_emb, tgt=emb, tgt_padding_mask=emb_invalid)
+                    emb, _ = self.tf_latent_query(
+                        src=lq_emb, tgt=emb, tgt_padding_mask=emb_invalid
+                    )
                 else:
-                    emb, _ = self.tf_latent_cross(src=lq_emb, tgt=emb, tgt_padding_mask=emb_invalid)
+                    emb, _ = self.tf_latent_cross(
+                        src=lq_emb, tgt=emb, tgt_padding_mask=emb_invalid
+                    )
                     emb, _ = self.tf_latent_self(src=emb, tgt=emb)
-                emb_invalid = (~valid).flatten(0, 1).unsqueeze(-1).expand(-1, lq_emb.shape[1])
+                emb_invalid = (
+                    (~valid).flatten(0, 1).unsqueeze(-1).expand(-1, lq_emb.shape[1])
+                )
             else:  # all2all attention without latent query
-                emb, _ = self.tf_self_attn(src=emb, tgt=emb, tgt_padding_mask=emb_invalid)
+                emb, _ = self.tf_self_attn(
+                    src=emb, tgt=emb, tgt_padding_mask=emb_invalid
+                )
 
         # [n_batch, n_pred, hidden_dim]
         anchors = self.anchors(valid.flatten(0, 1), emb, target_type.flatten(0, 1))
@@ -146,7 +175,9 @@ class AgentCentricGlobal(nn.Module):
         decoder["hidden_dim"] = hidden_dim
         self.decoder = DecoderEnsemble(n_decoders, decoder_cfg=decoder)
 
-        model_parameters = filter(lambda p: p.requires_grad, self.intra_class_encoder.parameters())
+        model_parameters = filter(
+            lambda p: p.requires_grad, self.intra_class_encoder.parameters()
+        )
         total_params = sum([np.prod(p.size()) for p in model_parameters])
         print(f"Encoder parameters: {total_params/1000000:.2f}M")
         model_parameters = filter(lambda p: p.requires_grad, self.decoder.parameters())
@@ -199,7 +230,9 @@ class AgentCentricGlobal(nn.Module):
             pred: [n_decoder, n_scene, n_target, n_pred, n_step_future, pred_dim]
         """
         for _ in range(inference_repeat_n):
-            valid = target_valid if self.pl_aggr else target_valid.any(-1)  # [n_scene, n_target]
+            valid = (
+                target_valid if self.pl_aggr else target_valid.any(-1)
+            )  # [n_scene, n_target]
             emb, emb_invalid = self.intra_class_encoder(
                 target_valid=target_valid,
                 target_attr=target_attr,
@@ -211,7 +244,9 @@ class AgentCentricGlobal(nn.Module):
                 tl_attr=tl_attr,
             )
 
-            conf, pred = self.decoder(valid=valid, target_type=target_type, emb=emb, emb_invalid=emb_invalid)
+            conf, pred = self.decoder(
+                valid=valid, target_type=target_type, emb=emb, emb_invalid=emb_invalid
+            )
 
         assert torch.isfinite(conf).all()
         assert torch.isfinite(pred).all()
@@ -245,27 +280,53 @@ class IntraClassEncoder(nn.Module):
         self.fc_tl = MLP([tl_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg)
         if self.use_point_net:
             assert not self.pl_aggr
-            self.point_net_target = PointNet(agent_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg)
-            self.point_net_other = PointNet(agent_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg)
-            self.point_net_map = PointNet(map_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg)
+            self.point_net_target = PointNet(
+                agent_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg
+            )
+            self.point_net_other = PointNet(
+                agent_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg
+            )
+            self.point_net_map = PointNet(
+                map_attr_dim, hidden_dim, n_layer=n_layer_mlp, **mlp_cfg
+            )
         else:
-            self.fc_target = MLP([agent_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg)
-            self.fc_other = MLP([agent_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg)
+            self.fc_target = MLP(
+                [agent_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg
+            )
+            self.fc_other = MLP(
+                [agent_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg
+            )
             self.fc_map = MLP([map_attr_dim] + [hidden_dim] * n_layer_mlp, **mlp_cfg)
 
         if self.add_learned_pe:
             if self.pl_aggr or self.use_point_net:
-                self.pe_target = nn.Parameter(torch.zeros([1, hidden_dim]), requires_grad=True)
-                self.pe_other = nn.Parameter(torch.zeros([1, 1, hidden_dim]), requires_grad=True)
-                self.pe_map = nn.Parameter(torch.zeros([1, 1, hidden_dim]), requires_grad=True)
+                self.pe_target = nn.Parameter(
+                    torch.zeros([1, hidden_dim]), requires_grad=True
+                )
+                self.pe_other = nn.Parameter(
+                    torch.zeros([1, 1, hidden_dim]), requires_grad=True
+                )
+                self.pe_map = nn.Parameter(
+                    torch.zeros([1, 1, hidden_dim]), requires_grad=True
+                )
             else:
-                self.pe_target = nn.Parameter(torch.zeros([1, n_step_hist, hidden_dim]), requires_grad=True)
-                self.pe_other = nn.Parameter(torch.zeros([1, 1, n_step_hist, hidden_dim]), requires_grad=True)
-                self.pe_map = nn.Parameter(torch.zeros([1, 1, n_pl_node, hidden_dim]), requires_grad=True)
+                self.pe_target = nn.Parameter(
+                    torch.zeros([1, n_step_hist, hidden_dim]), requires_grad=True
+                )
+                self.pe_other = nn.Parameter(
+                    torch.zeros([1, 1, n_step_hist, hidden_dim]), requires_grad=True
+                )
+                self.pe_map = nn.Parameter(
+                    torch.zeros([1, 1, n_pl_node, hidden_dim]), requires_grad=True
+                )
             if self.use_current_tl:
-                self.pe_tl = nn.Parameter(torch.zeros([1, 1, 1, hidden_dim]), requires_grad=True)
+                self.pe_tl = nn.Parameter(
+                    torch.zeros([1, 1, 1, hidden_dim]), requires_grad=True
+                )
             else:
-                self.pe_tl = nn.Parameter(torch.zeros([1, n_step_hist, 1, hidden_dim]), requires_grad=True)
+                self.pe_tl = nn.Parameter(
+                    torch.zeros([1, n_step_hist, 1, hidden_dim]), requires_grad=True
+                )
 
         self.tf_map = None
         self.tf_tl = None
@@ -274,26 +335,34 @@ class IntraClassEncoder(nn.Module):
         if n_layer_tf > 0:
             self.tf_tl = nn.ModuleList(
                 [
-                    TransformerBlock(d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg)
+                    TransformerBlock(
+                        d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg
+                    )
                     for _ in range(n_layer_tf)
                 ]
             )
             self.tf_map = nn.ModuleList(
                 [
-                    TransformerBlock(d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg)
+                    TransformerBlock(
+                        d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg
+                    )
                     for _ in range(n_layer_tf)
                 ]
             )
             self.tf_other = nn.ModuleList(
                 [
-                    TransformerBlock(d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg)
+                    TransformerBlock(
+                        d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg
+                    )
                     for _ in range(n_layer_tf)
                 ]
             )
             if not (self.pl_aggr or self.use_point_net):  # singular token in this case
                 self.tf_target = nn.ModuleList(
                     [
-                        TransformerBlock(d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg)
+                        TransformerBlock(
+                            d_model=hidden_dim, d_feedforward=hidden_dim * 4, **tf_cfg
+                        )
                         for _ in range(n_layer_tf)
                     ]
                 )
@@ -345,9 +414,13 @@ class IntraClassEncoder(nn.Module):
 
         if self.use_point_net:
             # [n_batch, n_map, map_attr_dim], [n_batch, n_map]
-            map_emb, map_valid = self.point_net_map(map_attr.flatten(0, 1), map_valid.flatten(0, 1))
+            map_emb, map_valid = self.point_net_map(
+                map_attr.flatten(0, 1), map_valid.flatten(0, 1)
+            )
             # [n_batch, n_other, agent_attr_dim], [n_batch, n_other]
-            other_emb, other_valid = self.point_net_other(other_attr.flatten(0, 1), other_valid.flatten(0, 1))
+            other_emb, other_valid = self.point_net_other(
+                other_attr.flatten(0, 1), other_valid.flatten(0, 1)
+            )
             # [n_scene, n_target, agent_attr_dim]
             target_emb, target_valid = self.point_net_target(target_attr, target_valid)
             target_emb = target_emb.flatten(0, 1)  # [n_batch, agent_attr_dim]
@@ -388,28 +461,42 @@ class IntraClassEncoder(nn.Module):
             _tl_invalid = ~tl_valid
             for mod in self.tf_tl:
                 tl_emb, _ = mod(
-                    src=tl_emb, src_padding_mask=_tl_invalid, tgt=tl_emb, tgt_padding_mask=_tl_invalid
+                    src=tl_emb,
+                    src_padding_mask=_tl_invalid,
+                    tgt=tl_emb,
+                    tgt_padding_mask=_tl_invalid,
                 )
         if self.tf_map is not None:
             _map_invalid = ~map_valid
             for mod in self.tf_map:
                 map_emb, _ = mod(
-                    src=map_emb, src_padding_mask=_map_invalid, tgt=map_emb, tgt_padding_mask=_map_invalid
+                    src=map_emb,
+                    src_padding_mask=_map_invalid,
+                    tgt=map_emb,
+                    tgt_padding_mask=_map_invalid,
                 )
         if self.tf_other is not None:
             _other_invalid = ~other_valid
             for mod in self.tf_other:
                 other_emb, _ = mod(
-                    src=other_emb, src_padding_mask=_other_invalid, tgt=other_emb, tgt_padding_mask=_other_invalid
+                    src=other_emb,
+                    src_padding_mask=_other_invalid,
+                    tgt=other_emb,
+                    tgt_padding_mask=_other_invalid,
                 )
         if self.tf_target is not None:
             _target_invalid = ~target_valid
             for mod in self.tf_target:
                 target_emb, _ = mod(
-                    src=target_emb, src_padding_mask=_target_invalid, tgt=target_emb, tgt_padding_mask=_target_invalid
+                    src=target_emb,
+                    src_padding_mask=_target_invalid,
+                    tgt=target_emb,
+                    tgt_padding_mask=_target_invalid,
                 )
 
         emb = torch.cat([target_emb, other_emb, tl_emb, map_emb], dim=1)
-        emb_invalid = ~torch.cat([target_valid, other_valid, tl_valid, map_valid], dim=1)
+        emb_invalid = ~torch.cat(
+            [target_valid, other_valid, tl_valid, map_valid], dim=1
+        )
 
         return emb, emb_invalid

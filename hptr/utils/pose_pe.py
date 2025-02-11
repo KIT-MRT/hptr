@@ -5,7 +5,9 @@ from hptr.models.modules.pos_emb import PositionalEmbedding, PositionalEmbedding
 
 
 class PosePE(nn.Module):
-    def __init__(self, mode: str, pe_dim: int = 256, theta_xy: float = 1e3, theta_cs: float = 1e1):
+    def __init__(
+        self, mode: str, pe_dim: int = 256, theta_xy: float = 1e3, theta_cs: float = 1e1
+    ):
         super().__init__()
         self.mode = mode
         if self.mode == "xy_dir":
@@ -44,7 +46,12 @@ class PosePE(nn.Module):
             if dir.shape[-1] == 1:
                 dir = torch.cat([dir.cos(), dir.sin()], dim=-1)
             pos_out = torch.cat(
-                [self.pe_xy(xy[..., 0]), self.pe_xy(xy[..., 1]), self.pe_dir(dir[..., 0]), self.pe_dir(dir[..., 1])],
+                [
+                    self.pe_xy(xy[..., 0]),
+                    self.pe_xy(xy[..., 1]),
+                    self.pe_dir(dir[..., 0]),
+                    self.pe_dir(dir[..., 1]),
+                ],
                 dim=-1,
             )
         elif self.mode == "pe_xy_yaw":
@@ -52,7 +59,10 @@ class PosePE(nn.Module):
                 dir = dir.squeeze(-1)
             else:
                 dir = torch.atan2(dir[..., 1], dir[..., 0])
-            pos_out = torch.cat([self.pe_xy(xy[..., 0]), self.pe_xy(xy[..., 1]), self.pe_yaw(dir)], dim=-1)
+            pos_out = torch.cat(
+                [self.pe_xy(xy[..., 0]), self.pe_xy(xy[..., 1]), self.pe_yaw(dir)],
+                dim=-1,
+            )
         return pos_out
 
     @staticmethod
@@ -70,9 +80,14 @@ class PosePE(nn.Module):
         segments_start = pos
         segment_vec = dir
         # [n_scene, n_target, n_map, n_pl_node]
-        segment_proj = (-segments_start * segment_vec).sum(-1) / ((segment_vec * segment_vec).sum(-1) + eps)
+        segment_proj = (-segments_start * segment_vec).sum(-1) / (
+            (segment_vec * segment_vec).sum(-1) + eps
+        )
         # [n_scene, n_target, n_map, n_pl_node, 2]
-        closest_points = segments_start + torch.clamp(segment_proj, min=0, max=1).unsqueeze(-1) * segment_vec
+        closest_points = (
+            segments_start
+            + torch.clamp(segment_proj, min=0, max=1).unsqueeze(-1) * segment_vec
+        )
         # [n_scene, n_target, n_map, n_pl_node, 1]
         r_norm = torch.norm(closest_points, dim=-1, keepdim=True)
         segment_vec_norm = torch.norm(segment_vec, dim=-1, keepdim=True)
@@ -82,7 +97,9 @@ class PosePE(nn.Module):
                 closest_points / (r_norm + eps),  # 2
                 segment_vec / (segment_vec_norm + eps),  # 2
                 segment_vec_norm,  # 1
-                torch.norm(segments_start + segment_vec - closest_points, dim=-1, keepdim=True),  # 1
+                torch.norm(
+                    segments_start + segment_vec - closest_points, dim=-1, keepdim=True
+                ),  # 1
             ],
             dim=-1,
         )

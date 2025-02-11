@@ -118,7 +118,10 @@ class VisWaymo:
         self.raster_map = self._draw_map(raster_map, map_valid, map_type, map_pos)
 
     def save_prediction_videos(
-        self, video_base_name: str, episode: Dict[str, np.ndarray], prediction: Optional[Dict[str, np.ndarray]]
+        self,
+        video_base_name: str,
+        episode: Dict[str, np.ndarray],
+        prediction: Optional[Dict[str, np.ndarray]],
     ) -> Dict[str, Tuple]:
         """
         Args:
@@ -160,7 +163,9 @@ class VisWaymo:
                     if episode["tl_lane/valid"][t_tl, i]:
                         lane_idx = episode["tl_lane/idx"][t_tl, i]
                         tl_state = episode["tl_lane/state"][t_tl, i].argmax()
-                        pos = self._to_pixel(episode["map/pos"][lane_idx][episode["map/valid"][lane_idx]])
+                        pos = self._to_pixel(
+                            episode["map/pos"][lane_idx][episode["map/valid"][lane_idx]]
+                        )
                         cv2.polylines(
                             step_image,
                             [pos],
@@ -185,7 +190,8 @@ class VisWaymo:
                         tl_state = episode["tl_stop/state"][t_tl, i].argmax()
                         stop_point = self._to_pixel(episode["tl_stop/pos"][t_tl, i])
                         stop_point_end = self._to_pixel(
-                            episode["tl_stop/pos"][t_tl, i] + 5 * episode["tl_stop/dir"][t_tl, i]
+                            episode["tl_stop/pos"][t_tl, i]
+                            + 5 * episode["tl_stop/dir"][t_tl, i]
                         )
                         cv2.arrowedLine(
                             step_image,
@@ -209,14 +215,24 @@ class VisWaymo:
                 )
                 bbox_gt = self._to_pixel(bbox_gt)
                 agent_role = episode["agent/role"][episode["agent/valid"][t]]
-                heading_start = self._to_pixel(episode["agent/pos"][t][episode["agent/valid"][t]])
+                heading_start = self._to_pixel(
+                    episode["agent/pos"][t][episode["agent/valid"][t]]
+                )
                 heading_end = self._to_pixel(
                     episode["agent/pos"][t][episode["agent/valid"][t]]
                     + 1.5
                     * np.stack(
                         [
-                            np.cos(episode["agent/yaw_bbox"][t, :, 0][episode["agent/valid"][t]]),
-                            np.sin(episode["agent/yaw_bbox"][t, :, 0][episode["agent/valid"][t]]),
+                            np.cos(
+                                episode["agent/yaw_bbox"][t, :, 0][
+                                    episode["agent/valid"][t]
+                                ]
+                            ),
+                            np.sin(
+                                episode["agent/yaw_bbox"][t, :, 0][
+                                    episode["agent/valid"][t]
+                                ]
+                            ),
                         ],
                         axis=-1,
                     )
@@ -250,24 +266,42 @@ class VisWaymo:
                         episode["agent/size"],
                     )
                     bbox_pred = self._to_pixel(bbox_pred)
-                    heading_start = self._to_pixel(prediction["agent/pos"][t_pred][prediction["agent/valid"][t_pred]])
+                    heading_start = self._to_pixel(
+                        prediction["agent/pos"][t_pred][
+                            prediction["agent/valid"][t_pred]
+                        ]
+                    )
                     heading_end = self._to_pixel(
-                        prediction["agent/pos"][t_pred][prediction["agent/valid"][t_pred]]
+                        prediction["agent/pos"][t_pred][
+                            prediction["agent/valid"][t_pred]
+                        ]
                         + 1.5
                         * np.stack(
                             [
-                                np.cos(prediction["agent/yaw_bbox"][t_pred, :, 0][prediction["agent/valid"][t_pred]]),
-                                np.sin(prediction["agent/yaw_bbox"][t_pred, :, 0][prediction["agent/valid"][t_pred]]),
+                                np.cos(
+                                    prediction["agent/yaw_bbox"][t_pred, :, 0][
+                                        prediction["agent/valid"][t_pred]
+                                    ]
+                                ),
+                                np.sin(
+                                    prediction["agent/yaw_bbox"][t_pred, :, 0][
+                                        prediction["agent/valid"][t_pred]
+                                    ]
+                                ),
                             ],
                             axis=-1,
                         )
                     )
-                    agent_role = episode["agent/role"][prediction["agent/valid"][t_pred]]
+                    agent_role = episode["agent/role"][
+                        prediction["agent/valid"][t_pred]
+                    ]
                     for i in range(agent_role.shape[0]):
                         if not agent_role[i].any():
                             color = COLOR_ALUMINIUM_0
                         else:
-                            color = self.agent_role_style[np.where(agent_role[i])[0].min()]
+                            color = self.agent_role_style[
+                                np.where(agent_role[i])[0].min()
+                            ]
                         cv2.fillConvexPoly(step_image_pd, bbox_pred[i], color=color)
                         cv2.arrowedLine(
                             step_image_pd,
@@ -280,7 +314,9 @@ class VisWaymo:
                         )
                     # step_image_mix = step_image.copy()
                     # cv2.addWeighted(raster_blend_gt, 0.6, step_image_pd, 1, 0, step_image_mix)
-                    step_image_mix = cv2.addWeighted(raster_blend_gt, 0.6, step_image_pd, 1, 0)
+                    step_image_mix = cv2.addWeighted(
+                        raster_blend_gt, 0.6, step_image_pd, 1, 0
+                    )
                 else:
                     step_image_pd = step_image_gt.copy()
                     step_image_mix = step_image_gt.copy()
@@ -325,7 +361,13 @@ class VisWaymo:
         image = self.raster_map.copy()
         if vis_cmd:
             image = cv2.putText(
-                image, self.agent_cmd_txt[cmd], (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 4
+                image,
+                self.agent_cmd_txt[cmd],
+                (30, 80),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                2,
+                (255, 255, 255),
+                4,
             )
         # ! draw traffic lights
         if "tl_lane/valid" in episode:
@@ -334,7 +376,9 @@ class VisWaymo:
                 if episode["tl_lane/valid"][t_tl, i]:
                     lane_idx = episode["tl_lane/idx"][t_tl, i]
                     tl_state = episode["tl_lane/state"][t_tl, i].argmax()
-                    pos = self._to_pixel(episode["map/pos"][lane_idx][episode["map/valid"][lane_idx]])
+                    pos = self._to_pixel(
+                        episode["map/pos"][lane_idx][episode["map/valid"][lane_idx]]
+                    )
                     cv2.polylines(
                         image,
                         [pos],
@@ -350,7 +394,8 @@ class VisWaymo:
                     tl_state = episode["tl_stop/state"][t_tl, i].argmax()
                     stop_point = self._to_pixel(episode["tl_stop/pos"][t_tl, i])
                     stop_point_end = self._to_pixel(
-                        episode["tl_stop/pos"][t_tl, i] + 5 * episode["tl_stop/dir"][t_tl, i]
+                        episode["tl_stop/pos"][t_tl, i]
+                        + 5 * episode["tl_stop/dir"][t_tl, i]
                     )
                     cv2.arrowedLine(
                         image,
@@ -369,14 +414,24 @@ class VisWaymo:
             episode["agent/size"],
         )
         bbox_gt = self._to_pixel(bbox_gt)
-        heading_start = self._to_pixel(episode["agent/pos"][step_current][episode["agent/valid"][step_current]])
+        heading_start = self._to_pixel(
+            episode["agent/pos"][step_current][episode["agent/valid"][step_current]]
+        )
         heading_end = self._to_pixel(
             episode["agent/pos"][step_current][episode["agent/valid"][step_current]]
             + 1.5
             * np.stack(
                 [
-                    np.cos(episode["agent/yaw_bbox"][step_current, :, 0][episode["agent/valid"][step_current]]),
-                    np.sin(episode["agent/yaw_bbox"][step_current, :, 0][episode["agent/valid"][step_current]]),
+                    np.cos(
+                        episode["agent/yaw_bbox"][step_current, :, 0][
+                            episode["agent/valid"][step_current]
+                        ]
+                    ),
+                    np.sin(
+                        episode["agent/yaw_bbox"][step_current, :, 0][
+                            episode["agent/valid"][step_current]
+                        ]
+                    ),
                 ],
                 axis=-1,
             )
@@ -396,14 +451,21 @@ class VisWaymo:
 
         # ! draw predictions
         pred_px = self._to_pixel(pred_xy)  # [80, n_pred, 2]
-        v_channel = pred_scores / np.max(pred_scores) * 0.6 + 0.3  # pred_scores: [n_pred]
+        v_channel = (
+            pred_scores / np.max(pred_scores) * 0.6 + 0.3
+        )  # pred_scores: [n_pred]
         for k_order, k in enumerate(pred_scores.argsort()):
             image_pred = np.zeros_like(image)
             color = COLOR_CYAN
             thickness = max(1, k_order - len(pred_scores) + 10)
             for i in range(pred_xy.shape[0] - 1):
                 cv2.line(
-                    image_pred, pred_px[i, k], pred_px[i + 1, k], color=color, thickness=thickness, lineType=cv2.LINE_AA
+                    image_pred,
+                    pred_px[i, k],
+                    pred_px[i + 1, k],
+                    color=color,
+                    thickness=thickness,
+                    lineType=cv2.LINE_AA,
                 )
             cv2.drawMarker(
                 image_pred,
@@ -422,7 +484,14 @@ class VisWaymo:
             if gt_valid[i] & gt_valid[i + 1]:
                 color = COLOR_ORANGE_1
                 thickness = 4
-                cv2.line(image, gt_px[i], gt_px[i + 1], color=color, thickness=thickness, lineType=cv2.LINE_AA)
+                cv2.line(
+                    image,
+                    gt_px[i],
+                    gt_px[i + 1],
+                    color=color,
+                    thickness=thickness,
+                    lineType=cv2.LINE_AA,
+                )
                 gt_last_valid = i + 1
         cv2.drawMarker(
             image,
@@ -437,22 +506,36 @@ class VisWaymo:
         k_draw = np.where(gt_valid[: step_current + 1])[0][-1]
         heading_start = self._to_pixel(gt_pos[k_draw, :2])
         heading_end = self._to_pixel(
-            gt_pos[k_draw, :2] + 1.5 * np.concatenate([np.cos(gt_yaw[k_draw]), np.sin(gt_yaw[k_draw])], axis=-1)
+            gt_pos[k_draw, :2]
+            + 1.5
+            * np.concatenate([np.cos(gt_yaw[k_draw]), np.sin(gt_yaw[k_draw])], axis=-1)
         )
 
-        bbox_hist = self._get_agent_bbox(gt_valid[k_draw], gt_pos[k_draw, :2], gt_yaw[k_draw], gt_size[:2])
+        bbox_hist = self._get_agent_bbox(
+            gt_valid[k_draw], gt_pos[k_draw, :2], gt_yaw[k_draw], gt_size[:2]
+        )
         bbox_hist = self._to_pixel(bbox_hist)
 
         cv2.fillConvexPoly(image, bbox_hist, color=COLOR_CYAN)
         cv2.arrowedLine(
-            image, heading_start, heading_end, color=COLOR_BLACK, thickness=4, line_type=cv2.LINE_AA, tipLength=0.6
+            image,
+            heading_start,
+            heading_end,
+            color=COLOR_BLACK,
+            thickness=4,
+            line_type=cv2.LINE_AA,
+            tipLength=0.6,
         )
 
         cv2.imwrite(im_path, image[..., ::-1])
         return torch.from_numpy(image)
 
     def _draw_map(
-        self, raster_map: np.ndarray, map_valid: np.ndarray, map_type: np.ndarray, map_pos: np.ndarray
+        self,
+        raster_map: np.ndarray,
+        map_valid: np.ndarray,
+        map_type: np.ndarray,
+        map_pos: np.ndarray,
     ) -> np.ndarray:
         """
         Args: numpy arrays
@@ -480,7 +563,9 @@ class VisWaymo:
         return raster_map
 
     @staticmethod
-    def _register_map(map_boundary: np.ndarray, px_per_m: float, edge_px: int = 100) -> Tuple[np.ndarray, np.ndarray]:
+    def _register_map(
+        map_boundary: np.ndarray, px_per_m: float, edge_px: int = 100
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Args:
             map_boundary: [4], xmin, xmax, ymin, ymax
@@ -505,7 +590,10 @@ class VisWaymo:
 
     @staticmethod
     def _get_agent_bbox(
-        agent_valid: np.ndarray, agent_pos: np.ndarray, agent_yaw: np.ndarray, agent_size: np.ndarray
+        agent_valid: np.ndarray,
+        agent_pos: np.ndarray,
+        agent_yaw: np.ndarray,
+        agent_size: np.ndarray,
     ) -> np.ndarray:
         yaw = agent_yaw[agent_valid]  # n, 1
         cos_yaw = np.cos(yaw)

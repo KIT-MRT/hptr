@@ -66,9 +66,13 @@ class SubWOMD:
         if not self.activate:
             return
 
-        waymo_trajs = waymo_trajs[:, 4::5].permute(0, 2, 3, 1, 4)  # [n_batch, n_agent, K, n_step, 2]
+        waymo_trajs = waymo_trajs[:, 4::5].permute(
+            0, 2, 3, 1, 4
+        )  # [n_batch, n_agent, K, n_step, 2]
         waymo_trajs = torch_pos2global(
-            waymo_trajs.flatten(1, 3), scenario_center.unsqueeze(1), torch_rad2rot(scenario_yaw)
+            waymo_trajs.flatten(1, 3),
+            scenario_center.unsqueeze(1),
+            torch_rad2rot(scenario_yaw),
         ).view(waymo_trajs.shape)
 
         waymo_trajs = waymo_trajs.cpu().numpy()
@@ -77,12 +81,16 @@ class SubWOMD:
         object_id = object_id.cpu().numpy()
 
         for i_batch in range(waymo_trajs.shape[0]):
-            agent_pos = waymo_trajs[i_batch, mask_pred[i_batch]]  # [n_agent_pred, K, n_step, 2]
+            agent_pos = waymo_trajs[
+                i_batch, mask_pred[i_batch]
+            ]  # [n_agent_pred, K, n_step, 2]
             agent_id = object_id[i_batch, mask_pred[i_batch]]  # [n_agent_pred]
             agent_score = waymo_scores[i_batch, mask_pred[i_batch]]  # [n_agent_pred, K]
 
             for n_K, submission in self.submissions.items():
-                scenario_prediction = motion_submission_pb2.ChallengeScenarioPredictions()
+                scenario_prediction = (
+                    motion_submission_pb2.ChallengeScenarioPredictions()
+                )
                 scenario_prediction.scenario_id = scenario_id[i_batch]
 
                 if submission.submission_type == 1:
@@ -93,22 +101,38 @@ class SubWOMD:
                         for _k in range(n_K):
                             scored_trajectory = motion_submission_pb2.ScoredTrajectory()
                             scored_trajectory.confidence = agent_score[i_track, _k]
-                            scored_trajectory.trajectory.center_x.extend(agent_pos[i_track, _k, :, 0])
-                            scored_trajectory.trajectory.center_y.extend(agent_pos[i_track, _k, :, 1])
+                            scored_trajectory.trajectory.center_x.extend(
+                                agent_pos[i_track, _k, :, 0]
+                            )
+                            scored_trajectory.trajectory.center_y.extend(
+                                agent_pos[i_track, _k, :, 1]
+                            )
                             prediction.trajectories.append(scored_trajectory)
-                        scenario_prediction.single_predictions.predictions.append(prediction)
+                        scenario_prediction.single_predictions.predictions.append(
+                            prediction
+                        )
                 else:
                     # joint prediction
                     for _k in range(n_K):
-                        scored_joint_trajectory = motion_submission_pb2.ScoredJointTrajectory()
+                        scored_joint_trajectory = (
+                            motion_submission_pb2.ScoredJointTrajectory()
+                        )
                         scored_joint_trajectory.confidence = agent_score[:, _k].sum(0)
                         for i_track in range(agent_pos.shape[0]):
                             object_trajectory = motion_submission_pb2.ObjectTrajectory()
                             object_trajectory.object_id = agent_id[i_track]
-                            object_trajectory.trajectory.center_x.extend(agent_pos[i_track, _k, :, 0])
-                            object_trajectory.trajectory.center_y.extend(agent_pos[i_track, _k, :, 1])
-                            scored_joint_trajectory.trajectories.append(object_trajectory)
-                        scenario_prediction.joint_prediction.joint_trajectories.append(scored_joint_trajectory)
+                            object_trajectory.trajectory.center_x.extend(
+                                agent_pos[i_track, _k, :, 0]
+                            )
+                            object_trajectory.trajectory.center_y.extend(
+                                agent_pos[i_track, _k, :, 1]
+                            )
+                            scored_joint_trajectory.trajectories.append(
+                                object_trajectory
+                            )
+                        scenario_prediction.joint_prediction.joint_trajectories.append(
+                            scored_joint_trajectory
+                        )
 
                 submission.scenario_predictions.append(scenario_prediction)
 
@@ -172,9 +196,13 @@ class SubAV2:
         if not self.activate:
             return
 
-        waymo_trajs = waymo_trajs.permute(0, 2, 3, 1, 4)  # [n_batch, n_agent, K, n_step, 2]
+        waymo_trajs = waymo_trajs.permute(
+            0, 2, 3, 1, 4
+        )  # [n_batch, n_agent, K, n_step, 2]
         waymo_trajs = torch_pos2global(
-            waymo_trajs.flatten(1, 3), scenario_center.unsqueeze(1), torch_rad2rot(scenario_yaw)
+            waymo_trajs.flatten(1, 3),
+            scenario_center.unsqueeze(1),
+            torch_rad2rot(scenario_yaw),
         ).view(waymo_trajs.shape)
 
         waymo_trajs = waymo_trajs.cpu().numpy()
@@ -183,13 +211,17 @@ class SubAV2:
         object_id = object_id.cpu().numpy()
 
         for i_batch in range(waymo_trajs.shape[0]):
-            agent_pos = waymo_trajs[i_batch, mask_pred[i_batch]]  # [n_agent_pred, K, n_step, 2]
+            agent_pos = waymo_trajs[
+                i_batch, mask_pred[i_batch]
+            ]  # [n_agent_pred, K, n_step, 2]
             agent_id = object_id[i_batch, mask_pred[i_batch]]  # [n_agent_pred]
             agent_score = waymo_scores[i_batch, mask_pred[i_batch]]  # [n_agent_pred, K]
 
             for i_agent in range(agent_id.shape[0]):
                 for n_K in self.submissions.keys():
-                    confidence = agent_score[i_agent, :n_K] / agent_score[i_agent, :n_K].sum()
+                    confidence = (
+                        agent_score[i_agent, :n_K] / agent_score[i_agent, :n_K].sum()
+                    )
                     for _k in range(n_K):
                         self.submissions[n_K].append(
                             (
@@ -209,7 +241,9 @@ class SubAV2:
         file_paths = []
         for k, prediction_rows in self.submissions.items():
             parquet_file_path = Path(f"av2_K{k}.parquet").as_posix()
-            submission_df = pd.DataFrame(prediction_rows, columns=self._SUBMISSION_COL_NAMES)
+            submission_df = pd.DataFrame(
+                prediction_rows, columns=self._SUBMISSION_COL_NAMES
+            )
             submission_df.to_parquet(parquet_file_path)
             if isinstance(logger, WandbLogger):
                 logger.experiment.save(parquet_file_path)

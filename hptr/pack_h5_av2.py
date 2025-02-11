@@ -85,7 +85,9 @@ N_STEP = 110
 
 
 def collate_agent_features(scenario_path, n_step):
-    tracks = scenario_serialization.load_argoverse_scenario_parquet(scenario_path).tracks
+    tracks = scenario_serialization.load_argoverse_scenario_parquet(
+        scenario_path
+    ).tracks
 
     agent_id = []
     agent_type = []
@@ -170,7 +172,8 @@ def collate_map_features(map_path):
         mf_type.append(PL_TYPE[lane_segment.lane_type])
 
         if (lane_segment.left_lane_boundary not in lane_boundary_set) and not (
-            lane_segment.is_intersection and lane_segment.left_mark_type in ["NONE", "UNKOWN"]
+            lane_segment.is_intersection
+            and lane_segment.left_mark_type in ["NONE", "UNKOWN"]
         ):
             lane_boundary_set.append(lane_segment.left_lane_boundary)
             mf_xyz.append(left_even_pts)
@@ -178,7 +181,8 @@ def collate_map_features(map_path):
             mf_type.append(PL_TYPE[lane_segment.left_mark_type])
 
         if (lane_segment.right_lane_boundary not in lane_boundary_set) and not (
-            lane_segment.is_intersection and lane_segment.right_mark_type in ["NONE", "UNKOWN"]
+            lane_segment.is_intersection
+            and lane_segment.right_mark_type in ["NONE", "UNKOWN"]
         ):
             lane_boundary_set.append(lane_segment.right_lane_boundary)
             mf_xyz.append(right_even_pts)
@@ -198,8 +202,12 @@ def main():
     parser.add_argument("--data-dir", default="/cluster/scratch/zhejzhan/av2_motion")
     parser.add_argument("--dataset", default="training")
     parser.add_argument("--out-dir", default="/cluster/scratch/zhejzhan/h5_av2_hptr")
-    parser.add_argument("--rand-pos", default=50.0, type=float, help="Meter. Set to -1 to disable.")
-    parser.add_argument("--rand-yaw", default=3.14, type=float, help="Radian. Set to -1 to disable.")
+    parser.add_argument(
+        "--rand-pos", default=50.0, type=float, help="Meter. Set to -1 to disable."
+    )
+    parser.add_argument(
+        "--rand-yaw", default=3.14, type=float, help="Radian. Set to -1 to disable."
+    )
     parser.add_argument("--dest-no-pred", action="store_true")
     args = parser.parse_args()
 
@@ -235,7 +243,12 @@ def main():
 
             episode = {}
             n_pl = pack_utils.pack_episode_map(
-                episode=episode, mf_id=mf_id, mf_xyz=mf_xyz, mf_type=mf_type, mf_edge=mf_edge, n_pl_max=N_PL_MAX
+                episode=episode,
+                mf_id=mf_id,
+                mf_xyz=mf_xyz,
+                mf_type=mf_type,
+                mf_edge=mf_edge,
+                n_pl_max=N_PL_MAX,
             )
             n_agent = pack_utils.pack_episode_agents(
                 episode=episode,
@@ -248,7 +261,9 @@ def main():
                 n_agent_max=N_AGENT_MAX,
                 step_current=STEP_CURRENT,
             )
-            scenario_center, scenario_yaw = pack_utils.center_at_sdc(episode, args.rand_pos, args.rand_yaw)
+            scenario_center, scenario_yaw = pack_utils.center_at_sdc(
+                episode, args.rand_pos, args.rand_yaw
+            )
             n_pl_max = max(n_pl_max, n_pl)
             n_agent_max = max(n_agent_max, n_agent)
 
@@ -299,8 +314,12 @@ def main():
                     dim_ped_lanes=DIM_PED_LANES,
                     dest_no_pred=args.dest_no_pred,
                 )
-                pack_utils.repack_episode_agents(episode, episode_reduced, mask_sim, N_AGENT, "history/")
-                pack_utils.repack_episode_agents_no_sim(episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "")
+                pack_utils.repack_episode_agents(
+                    episode, episode_reduced, mask_sim, N_AGENT, "history/"
+                )
+                pack_utils.repack_episode_agents_no_sim(
+                    episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, ""
+                )
                 pack_utils.repack_episode_agents_no_sim(
                     episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "history/"
                 )
@@ -314,7 +333,9 @@ def main():
                     dist_thresh_agent=THRESH_AGENT,
                     step_current=STEP_CURRENT,
                 )
-                pack_utils.repack_episode_agents(episode, episode_reduced, mask_sim, N_AGENT, "history/")
+                pack_utils.repack_episode_agents(
+                    episode, episode_reduced, mask_sim, N_AGENT, "history/"
+                )
                 pack_utils.repack_episode_agents_no_sim(
                     episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "history/"
                 )
@@ -332,7 +353,9 @@ def main():
             hf_episode.attrs["with_map"] = True
 
             for k, v in episode_reduced.items():
-                hf_episode.create_dataset(k, data=v, compression="gzip", compression_opts=4, shuffle=True)
+                hf_episode.create_dataset(
+                    k, data=v, compression="gzip", compression_opts=4, shuffle=True
+                )
 
         print(f"n_pl_max: {n_pl_max}, n_agent_max: {n_agent_max}")
         print(f"n_agent_sim: {n_agent_sim}, n_agent_no_sim: {n_agent_no_sim}")

@@ -55,7 +55,9 @@ class MLP(nn.Module):
                         layers.append(nn.BatchNorm1d(fc_dims[i + 1]))
                     if dropout_p is not None:
                         layers.append(nn.Dropout(p=dropout_p))
-                    self.end_layer_activation = _get_activation(activation, inplace=True)
+                    self.end_layer_activation = _get_activation(
+                        activation, inplace=True
+                    )
                 else:
                     self.end_layer_activation = None
 
@@ -63,7 +65,9 @@ class MLP(nn.Module):
         self.output_dim = fc_dims[-1]
         self.fc_layers = nn.Sequential(*layers)
 
-    def forward(self, x: Tensor, valid_mask: Optional[Tensor] = None, fill_invalid: float = 0.0) -> Tensor:
+    def forward(
+        self, x: Tensor, valid_mask: Optional[Tensor] = None, fill_invalid: float = 0.0
+    ) -> Tensor:
         """
         Args:
             x: [..., input_dim]

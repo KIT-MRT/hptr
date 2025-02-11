@@ -40,14 +40,20 @@ def get_rel_dist(xy: Tensor, invalid: Tensor) -> Tensor:
     Returns:
         rel_dist: [n_scene, n_emb, n_emb]
     """
-    rel_dist = torch.norm(xy.unsqueeze(1) - xy.unsqueeze(2), dim=-1)  # [n_scene, n_emb, n_emb]
+    rel_dist = torch.norm(
+        xy.unsqueeze(1) - xy.unsqueeze(2), dim=-1
+    )  # [n_scene, n_emb, n_emb]
     rel_dist.masked_fill_(invalid.unsqueeze(1) | invalid.unsqueeze(2), float("inf"))
     return rel_dist
 
 
 @torch.no_grad()
 def get_tgt_knn_idx(
-    tgt_invalid: Tensor, rel_pose: Optional[Tensor], rel_dist: Tensor, n_tgt_knn: int, dist_limit: Union[float, Tensor],
+    tgt_invalid: Tensor,
+    rel_pose: Optional[Tensor],
+    rel_dist: Tensor,
+    n_tgt_knn: int,
+    dist_limit: Union[float, Tensor],
 ) -> Tuple[Optional[Tensor], Tensor, Optional[Tensor]]:
     """
     Args:
@@ -68,9 +74,13 @@ def get_tgt_knn_idx(
 
     if 0 < n_tgt_knn < tgt_invalid.shape[1]:
         # [n_scene, n_src, n_tgt_knn]
-        dist_knn, idx_tgt = torch.topk(rel_dist, n_tgt_knn, dim=-1, largest=False, sorted=False)
+        dist_knn, idx_tgt = torch.topk(
+            rel_dist, n_tgt_knn, dim=-1, largest=False, sorted=False
+        )
         # [n_scene, n_src, n_tgt_knn]
-        tgt_invalid_knn = tgt_invalid.unsqueeze(1).expand(-1, n_src, -1)[idx_scene, idx_src, idx_tgt]
+        tgt_invalid_knn = tgt_invalid.unsqueeze(1).expand(-1, n_src, -1)[
+            idx_scene, idx_src, idx_tgt
+        ]
         # [n_batch, n_src, n_tgt_knn, 3]
         if rel_pose is None:
             rpe = None
@@ -78,7 +88,9 @@ def get_tgt_knn_idx(
             rpe = rel_pose[idx_scene, idx_src, idx_tgt]
     else:
         dist_knn = rel_dist
-        tgt_invalid_knn = tgt_invalid.unsqueeze(1).expand(-1, n_src, -1)  # [n_scene, n_src, n_tgt]
+        tgt_invalid_knn = tgt_invalid.unsqueeze(1).expand(
+            -1, n_src, -1
+        )  # [n_scene, n_src, n_tgt]
         rpe = rel_pose
         idx_tgt = None
 

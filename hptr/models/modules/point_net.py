@@ -61,20 +61,31 @@ class PointNet(nn.Module):
         x = self.input_mlp(x, valid)  # [n_batch, n_pl, n_pl_node, hidden_dim]
 
         for mlp in self.mlp_layers:
-            feature_encoded = mlp(x, valid, float("-inf"))  # [n_batch, n_pl, n_pl_node, hidden_dim//2]
+            feature_encoded = mlp(
+                x, valid, float("-inf")
+            )  # [n_batch, n_pl, n_pl_node, hidden_dim//2]
             feature_pooled = feature_encoded.amax(dim=2, keepdim=True)
-            x = torch.cat((feature_encoded, feature_pooled.expand(-1, -1, valid.shape[-1], -1)), dim=-1)
+            x = torch.cat(
+                (feature_encoded, feature_pooled.expand(-1, -1, valid.shape[-1], -1)),
+                dim=-1,
+            )
 
         if self.pool_mode == "max":
-            x.masked_fill_(~valid.unsqueeze(-1), float("-inf"))  # [n_batch, n_pl, n_pl_node, hidden_dim]
+            x.masked_fill_(
+                ~valid.unsqueeze(-1), float("-inf")
+            )  # [n_batch, n_pl, n_pl_node, hidden_dim]
             emb = x.amax(dim=2, keepdim=False)  # [n_batch, n_pl, hidden_dim]
         elif self.pool_mode == "first":
             emb = x[:, :, 0]
         elif self.pool_mode == "mean":
-            x.masked_fill_(~valid.unsqueeze(-1), 0)  # [n_batch, n_pl, n_pl_node, hidden_dim]
+            x.masked_fill_(
+                ~valid.unsqueeze(-1), 0
+            )  # [n_batch, n_pl, n_pl_node, hidden_dim]
             emb = x.sum(dim=2, keepdim=False)  # [batch_size, n_pl, hidden_dim]
             emb = emb / (valid.sum(dim=-1, keepdim=True) + torch.finfo(x.dtype).eps)
 
         emb_valid = valid.any(-1)  # [n_batch, n_pl]
-        emb = emb.masked_fill(~emb_valid.unsqueeze(-1), 0)  # [n_batch, n_pl, hidden_dim]
+        emb = emb.masked_fill(
+            ~emb_valid.unsqueeze(-1), 0
+        )  # [n_batch, n_pl, hidden_dim]
         return emb, emb_valid

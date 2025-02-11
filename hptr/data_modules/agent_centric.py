@@ -3,7 +3,12 @@ from typing import Dict
 from omegaconf import DictConfig
 import torch
 from torch import nn, Tensor
-from hptr.utils.transform_utils import torch_rad2rot, torch_pos2local, torch_dir2local, torch_rad2local
+from hptr.utils.transform_utils import (
+    torch_rad2rot,
+    torch_pos2local,
+    torch_dir2local,
+    torch_rad2local,
+)
 
 
 class AgentCentricPreProcessing(nn.Module):
@@ -108,21 +113,30 @@ class AgentCentricPreProcessing(nn.Module):
 
         # ! find target agents
         if self.training:
-            target_weights = batch[prefix + "agent/role"].sum(-1) + batch[prefix + "agent/valid"][:, self.step_current]
+            target_weights = (
+                batch[prefix + "agent/role"].sum(-1)
+                + batch[prefix + "agent/valid"][:, self.step_current]
+            )
         else:
             target_weights = (
                 batch[prefix + "agent/role"][..., -1] * 10
                 + batch[prefix + "agent/role"].sum(-1)
                 + batch[prefix + "agent/valid"][:, self.step_current]
             )
-        target_indices = torch.topk(target_weights, self.n_target, largest=True, dim=-1)[1]
+        target_indices = torch.topk(
+            target_weights, self.n_target, largest=True, dim=-1
+        )[1]
         scene_indices = torch.arange(n_scene).unsqueeze(1)
         batch["ref/idx"] = target_indices  # [n_scene, n_target]
         batch["ref/idx_n"] = batch[prefix + "agent/valid"].shape[-1]
 
         # ! get ref pos/yaw/rot for global to local transform
-        ref_pos = batch[prefix + "agent/pos"][:, self.step_current, :][scene_indices, target_indices].unsqueeze(2)
-        ref_yaw = batch[prefix + "agent/yaw_bbox"][:, self.step_current, :, 0][scene_indices, target_indices]
+        ref_pos = batch[prefix + "agent/pos"][:, self.step_current, :][
+            scene_indices, target_indices
+        ].unsqueeze(2)
+        ref_yaw = batch[prefix + "agent/yaw_bbox"][:, self.step_current, :, 0][
+            scene_indices, target_indices
+        ]
         ref_rot = torch_rad2rot(ref_yaw)
         batch["ref/pos"] = ref_pos  # [n_scene, n_target, 1, 2]
         batch["ref/rot"] = ref_rot  # [n_scene, n_target, 2, 2]
@@ -134,69 +148,103 @@ class AgentCentricPreProcessing(nn.Module):
         # ! prepare target agents states
         # [n_scene, n_step, n_agent, ...] -> [n_scene, n_agent, n_step, ...] -> [n_scene, n_target, n_step_hist, ...]
         for k in ("valid", "pos", "vel", "spd", "acc", "yaw_bbox", "yaw_rate"):
-            batch[f"ac/target_{k}"] = batch[f"{prefix}agent/{k}"][:, : self.n_step_hist].transpose(1, 2)[
-                scene_indices, target_indices
-            ]
+            batch[f"ac/target_{k}"] = batch[f"{prefix}agent/{k}"][
+                :, : self.n_step_hist
+            ].transpose(1, 2)[scene_indices, target_indices]
         # [n_scene, n_target, n_step_hist, 2]
-        batch["ac/target_pos"] = torch_pos2local(batch["ac/target_pos"], ref_pos, ref_rot)
+        batch["ac/target_pos"] = torch_pos2local(
+            batch["ac/target_pos"], ref_pos, ref_rot
+        )
         batch["ac/target_vel"] = torch_dir2local(batch["ac/target_vel"], ref_rot)
         # [n_scene, n_target, n_step_hist, 1]
-        batch["ac/target_yaw_bbox"] = torch_rad2local(batch["ac/target_yaw_bbox"], ref_yaw.unsqueeze(-1), cast=False)
+        batch["ac/target_yaw_bbox"] = torch_rad2local(
+            batch["ac/target_yaw_bbox"], ref_yaw.unsqueeze(-1), cast=False
+        )
 
         # ! prepare target agents attributes
         # [n_scene, n_agent, :] -> [n_scene, n_target, :]
         for k in ("type", "role", "size"):
-            batch[f"ac/target_{k}"] = batch[f"{prefix}agent/{k}"][scene_indices, target_indices]
+            batch[f"ac/target_{k}"] = batch[f"{prefix}agent/{k}"][
+                scene_indices, target_indices
+            ]
 
         # ! training/validation time, prepare "gt/" for losses
         # [n_scene, n_step, n_agent, ...] -> [n_scene, n_agent, n_step, ...] -> [n_scene, n_target, n_step_future, ...]
         if "agent/valid" in batch.keys():
             for k in ("valid", "spd", "pos", "vel", "yaw_bbox"):
-                batch[f"gt/{k}"] = batch[f"agent/{k}"][:, self.n_step_hist :].transpose(1, 2)[
-                    scene_indices, target_indices
-                ]
+                batch[f"gt/{k}"] = batch[f"agent/{k}"][:, self.n_step_hist :].transpose(
+                    1, 2
+                )[scene_indices, target_indices]
             # [n_scene, n_target, n_step_hist, 2]
             batch["gt/pos"] = torch_pos2local(batch["gt/pos"], ref_pos, ref_rot)
             batch["gt/vel"] = torch_dir2local(batch["gt/vel"], ref_rot)
             # [n_scene, n_target, n_step_hist, 1]
-            batch["gt/yaw_bbox"] = torch_rad2local(batch["gt/yaw_bbox"], ref_yaw.unsqueeze(-1), cast=False)
+            batch["gt/yaw_bbox"] = torch_rad2local(
+                batch["gt/yaw_bbox"], ref_yaw.unsqueeze(-1), cast=False
+            )
             # [n_scene, n_agent, :] -> [n_scene, n_target, :]
             batch["gt/cmd"] = batch["agent/cmd"][scene_indices, target_indices]
 
         # ! prepare scene_indices and target_indices for other agents
         # [n_scene, n_step, n_agent] -> [n_scene, 1, n_agent, n_step_hist]
-        other_valid = batch[prefix + "agent/valid"][:, : self.n_step_hist].transpose(1, 2).unsqueeze(1)
-        other_valid = other_valid.repeat(1, self.n_target, 1, 1)  # [n_scene, n_target, n_agent, n_step_hist]
+        other_valid = (
+            batch[prefix + "agent/valid"][:, : self.n_step_hist]
+            .transpose(1, 2)
+            .unsqueeze(1)
+        )
+        other_valid = other_valid.repeat(
+            1, self.n_target, 1, 1
+        )  # [n_scene, n_target, n_agent, n_step_hist]
         # remove ego: target_indices [n_scene, n_target]
         for _s in range(n_scene):
             for _t in range(self.n_target):
                 other_valid[_s, _t, target_indices[_s, _t]] = False
         # target_pos: [n_scene, n_target, 1, 2], batch["agent/pos"]: [n_scene, n_step, n_agent, 2]
-        other_dist = torch.norm(batch[prefix + "agent/pos"][:, [self.step_current]] - ref_pos, dim=-1)
-        other_dist.masked_fill_(~other_valid[..., self.step_current], float("inf"))  # [n_scene, n_target, n_agent]
+        other_dist = torch.norm(
+            batch[prefix + "agent/pos"][:, [self.step_current]] - ref_pos, dim=-1
+        )
+        other_dist.masked_fill_(
+            ~other_valid[..., self.step_current], float("inf")
+        )  # [n_scene, n_target, n_agent]
         # [n_scene, n_target, n_other]
-        other_dist, other_indices = torch.topk(other_dist, self.n_other, largest=False, dim=-1)
+        other_dist, other_indices = torch.topk(
+            other_dist, self.n_other, largest=False, dim=-1
+        )
         other_scene_indices = torch.arange(n_scene)[:, None, None]  # [n_scene, 1, 1]
-        other_target_indices = torch.arange(self.n_target)[None, :, None]  # [1, n_target, 1]
+        other_target_indices = torch.arange(self.n_target)[
+            None, :, None
+        ]  # [1, n_target, 1]
 
         # ! prepare other agents states
         # [n_scene, n_target, n_agent, n_step_hist] -> [n_scene, n_target, n_other, n_step_hist]
-        batch["ac/other_valid"] = other_valid[other_scene_indices, other_target_indices, other_indices]
-        batch["ac/other_valid"] = batch["ac/other_valid"] & (other_dist.unsqueeze(-1) < 2e3)
+        batch["ac/other_valid"] = other_valid[
+            other_scene_indices, other_target_indices, other_indices
+        ]
+        batch["ac/other_valid"] = batch["ac/other_valid"] & (
+            other_dist.unsqueeze(-1) < 2e3
+        )
         # [n_scene, n_step, n_agent, :] -> [n_scene, n_target, n_other, n_step_hist, :]
         for k in ("spd", "acc", "yaw_rate", "pos", "vel", "yaw_bbox"):
             batch[f"ac/other_{k}"] = (
                 batch[f"{prefix}agent/{k}"][:, : self.n_step_hist]
                 .transpose(1, 2)
                 .unsqueeze(1)
-                .repeat(1, self.n_target, 1, 1, 1)[other_scene_indices, other_target_indices, other_indices]
+                .repeat(1, self.n_target, 1, 1, 1)[
+                    other_scene_indices, other_target_indices, other_indices
+                ]
             )
         # target_pos: [n_scene, n_target, 1, 2], target_rot: [n_scene, n_target, 2, 2], target_yaw: [n_scene, n_target]
         # [n_scene, n_target, n_other, n_step_hist, 2]
-        batch["ac/other_pos"] = torch_pos2local(batch["ac/other_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2))
-        batch["ac/other_vel"] = torch_dir2local(batch["ac/other_vel"], ref_rot.unsqueeze(2))
+        batch["ac/other_pos"] = torch_pos2local(
+            batch["ac/other_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2)
+        )
+        batch["ac/other_vel"] = torch_dir2local(
+            batch["ac/other_vel"], ref_rot.unsqueeze(2)
+        )
         # [n_scene, n_target, n_other, n_step_hist, 1]
-        batch["ac/other_yaw_bbox"] = torch_rad2local(batch["ac/other_yaw_bbox"], ref_yaw[:, :, None, None], cast=False)
+        batch["ac/other_yaw_bbox"] = torch_rad2local(
+            batch["ac/other_yaw_bbox"], ref_yaw[:, :, None, None], cast=False
+        )
 
         # ! prepare other agents attributes
         # [n_scene, n_agent, :] -> [n_scene, n_target, n_other, :]
@@ -204,21 +252,29 @@ class AgentCentricPreProcessing(nn.Module):
             batch[f"ac/other_{k}"] = (
                 batch[f"{prefix}agent/{k}"]
                 .unsqueeze(1)
-                .repeat(1, self.n_target, 1, 1)[other_scene_indices, other_target_indices, other_indices]
+                .repeat(1, self.n_target, 1, 1)[
+                    other_scene_indices, other_target_indices, other_indices
+                ]
             )
 
         # ! prepare agent-centric map polylines
         # [n_scene, n_pl, n_pl_node, 2], [n_scene, n_target, 1, 2]
         map_dist = torch.norm(batch["map/pos"][:, :, 0].unsqueeze(1) - ref_pos, dim=-1)
-        map_dist.masked_fill_(~batch["map/valid"][..., 0].unsqueeze(1), float("inf"))  # [n_scene, n_target, n_pl]
-        map_dist, map_indices = torch.topk(map_dist, self.n_map, largest=False, dim=-1)  # [n_scene, n_target, n_map]
+        map_dist.masked_fill_(
+            ~batch["map/valid"][..., 0].unsqueeze(1), float("inf")
+        )  # [n_scene, n_target, n_pl]
+        map_dist, map_indices = torch.topk(
+            map_dist, self.n_map, largest=False, dim=-1
+        )  # [n_scene, n_target, n_map]
 
         # [n_scene, n_pl, n_pl_node(20) / n_pl_type(11)] -> [n_scene, n_target, n_map, n_pl_node(20) / n_pl_type(11)]
         for k in ("valid", "type"):
             batch[f"ac/map_{k}"] = (
                 batch[f"map/{k}"]
                 .unsqueeze(1)
-                .repeat(1, self.n_target, 1, 1)[other_scene_indices, other_target_indices, map_indices]
+                .repeat(1, self.n_target, 1, 1)[
+                    other_scene_indices, other_target_indices, map_indices
+                ]
             )
         batch["ac/map_valid"] = batch["ac/map_valid"] & (map_dist.unsqueeze(-1) < 3e3)
 
@@ -227,31 +283,48 @@ class AgentCentricPreProcessing(nn.Module):
             batch[f"ac/map_{k}"] = (
                 batch[f"map/{k}"]
                 .unsqueeze(1)
-                .repeat(1, self.n_target, 1, 1, 1)[other_scene_indices, other_target_indices, map_indices]
+                .repeat(1, self.n_target, 1, 1, 1)[
+                    other_scene_indices, other_target_indices, map_indices
+                ]
             )
         # target_pos: [n_scene, n_target, 1, 2], target_rot: [n_scene, n_target, 2, 2]
         # [n_scene, n_target, n_map, n_pl_node, 2]
-        batch["ac/map_pos"] = torch_pos2local(batch["ac/map_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2))
+        batch["ac/map_pos"] = torch_pos2local(
+            batch["ac/map_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2)
+        )
         batch["ac/map_dir"] = torch_dir2local(batch["ac/map_dir"], ref_rot.unsqueeze(2))
 
         # ! prepare agent-centric traffic lights
         # [n_scene, n_step_hist, n_tl_stop, 2], [n_scene, n_target, 1, 2]
         tl_dist = torch.norm(
-            batch[prefix + "tl_stop/pos"][:, : self.n_step_hist].unsqueeze(1) - ref_pos.unsqueeze(2), dim=-1
+            batch[prefix + "tl_stop/pos"][:, : self.n_step_hist].unsqueeze(1)
+            - ref_pos.unsqueeze(2),
+            dim=-1,
         )
         # [n_scene, n_target, n_step_hist, n_tl_stop]
-        tl_dist.masked_fill_(~batch[prefix + "tl_stop/valid"][:, : self.n_step_hist].unsqueeze(1), float("inf"))
+        tl_dist.masked_fill_(
+            ~batch[prefix + "tl_stop/valid"][:, : self.n_step_hist].unsqueeze(1),
+            float("inf"),
+        )
         # [n_scene, n_target, n_step_hist, n_tl]
         tl_dist, tl_indices = torch.topk(tl_dist, self.n_tl, largest=False, dim=-1)
-        tl_scene_indices = torch.arange(n_scene)[:, None, None, None]  # [n_scene, 1, 1, 1]
-        tl_target_indices = torch.arange(self.n_target)[None, :, None, None]  # [1, n_target, 1, 1]
-        tl_step_indices = torch.arange(tl_indices.shape[2])[None, None, :, None]  # [1, 1, n_target, 1]
+        tl_scene_indices = torch.arange(n_scene)[
+            :, None, None, None
+        ]  # [n_scene, 1, 1, 1]
+        tl_target_indices = torch.arange(self.n_target)[
+            None, :, None, None
+        ]  # [1, n_target, 1, 1]
+        tl_step_indices = torch.arange(tl_indices.shape[2])[
+            None, None, :, None
+        ]  # [1, 1, n_target, 1]
 
         # [n_scene, n_step, n_tl_stop] -> [n_scene, n_target, n_step_hist, n_tl]
         batch["ac/tl_valid"] = (
             batch[prefix + "tl_stop/valid"][:, : self.n_step_hist]
             .unsqueeze(1)
-            .repeat(1, self.n_target, 1, 1)[tl_scene_indices, tl_target_indices, tl_step_indices, tl_indices]
+            .repeat(1, self.n_target, 1, 1)[
+                tl_scene_indices, tl_target_indices, tl_step_indices, tl_indices
+            ]
         )
         batch["ac/tl_valid"] = batch["ac/tl_valid"] & (tl_dist < 1e3)
         # [n_scene, n_step, n_tl_stop, :] -> [n_scene, n_target, n_step_hist, n_tl, :]
@@ -259,11 +332,15 @@ class AgentCentricPreProcessing(nn.Module):
             batch[f"ac/tl_{k}"] = (
                 batch[f"{prefix}tl_stop/{k}"][:, : self.n_step_hist]
                 .unsqueeze(1)
-                .repeat(1, self.n_target, 1, 1, 1)[tl_scene_indices, tl_target_indices, tl_step_indices, tl_indices]
+                .repeat(1, self.n_target, 1, 1, 1)[
+                    tl_scene_indices, tl_target_indices, tl_step_indices, tl_indices
+                ]
             )
         # target_pos: [n_scene, n_target, 1, 2], target_rot: [n_scene, n_target, 2, 2]
         # [n_scene, n_target, n_step_hist, n_tl, 2]
-        batch["ac/tl_pos"] = torch_pos2local(batch["ac/tl_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2))
+        batch["ac/tl_pos"] = torch_pos2local(
+            batch["ac/tl_pos"], ref_pos.unsqueeze(2), ref_rot.unsqueeze(2)
+        )
         batch["ac/tl_dir"] = torch_dir2local(batch["ac/tl_dir"], ref_rot.unsqueeze(2))
 
         if self.mask_invalid:

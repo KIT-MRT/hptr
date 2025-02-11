@@ -30,19 +30,28 @@ class MultiModalAnchors(nn.Module):
             self.anchors.uniform_(-scale, scale)
             self.anchors = nn.Parameter(self.anchors, requires_grad=True)
         elif self.mode_init == "randn":
-            self.anchors = nn.Parameter(torch.randn([n_anchors, n_pred, hidden_dim]) * scale, requires_grad=True)
+            self.anchors = nn.Parameter(
+                torch.randn([n_anchors, n_pred, hidden_dim]) * scale, requires_grad=True
+            )
         else:
             raise NotImplementedError
 
         self.mode_emb = mode_emb
         if self.mode_emb == "linear":
-            self.mlp_anchor = nn.Linear(self.anchors.shape[-1] + emb_dim, hidden_dim, bias=False)
+            self.mlp_anchor = nn.Linear(
+                self.anchors.shape[-1] + emb_dim, hidden_dim, bias=False
+            )
         elif self.mode_emb == "mlp":
-            self.mlp_anchor = MLP([self.anchors.shape[-1] + emb_dim] + [hidden_dim] * 2, end_layer_activation=False)
+            self.mlp_anchor = MLP(
+                [self.anchors.shape[-1] + emb_dim] + [hidden_dim] * 2,
+                end_layer_activation=False,
+            )
         elif self.mode_emb == "add" or self.mode_emb == "none":
             assert emb_dim == hidden_dim
             if self.anchors.shape[-1] != hidden_dim:
-                self.mlp_anchor = nn.Linear(self.anchors.shape[-1], hidden_dim, bias=False)
+                self.mlp_anchor = nn.Linear(
+                    self.anchors.shape[-1], hidden_dim, bias=False
+                )
             else:
                 self.mlp_anchor = None
         else:
@@ -66,14 +75,20 @@ class MultiModalAnchors(nn.Module):
 
         if self.mode_emb == "linear" or self.mode_emb == "mlp":
             # [n_scene*n_agent, n_pred, hidden_dim + emb_dim]
-            mm_emb = torch.cat([emb.unsqueeze(1).expand(-1, self.n_pred, -1), anchors], dim=-1)
+            mm_emb = torch.cat(
+                [emb.unsqueeze(1).expand(-1, self.n_pred, -1), anchors], dim=-1
+            )
             mm_emb = self.mlp_anchor(mm_emb)
         elif self.mode_emb == "add":
             if self.mlp_anchor is not None:
-                anchors = self.mlp_anchor(anchors)  # [n_scene*n_agent, n_pred, hidden_dim]
+                anchors = self.mlp_anchor(
+                    anchors
+                )  # [n_scene*n_agent, n_pred, hidden_dim]
             mm_emb = emb.unsqueeze(1) + anchors
         elif self.mode_emb == "none":
             if self.mlp_anchor is not None:
-                anchors = self.mlp_anchor(anchors)  # [n_scene*n_agent, n_pred, hidden_dim]
+                anchors = self.mlp_anchor(
+                    anchors
+                )  # [n_scene*n_agent, n_pred, hidden_dim]
             mm_emb = anchors
         return mm_emb.masked_fill(~valid[:, None, None], 0)

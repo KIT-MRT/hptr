@@ -29,7 +29,7 @@ hydra.run.dir='/cluster/scratch/zhejzhan/logs/${now:%Y-%m-%d}/${now:%H-%M-%S}'
 }
 
 # ! For AV2 dataset.
-# DATASET_DIR="h5_av2_hptr" 
+# DATASET_DIR="h5_av2_hptr"
 # trainer=av2 \
 # model=scr_av2 \
 # datamodule=h5_av2 \

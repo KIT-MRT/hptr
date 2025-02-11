@@ -22,7 +22,9 @@ class PositionalEmbedding(nn.Module):
         """
         # [..., dim]
         pos_enc = x.unsqueeze(-1) * self.freqs.view([1] * x.dim() + [-1])
-        pos_enc = torch.cat([torch.cos(pos_enc[..., ::2]), torch.sin(pos_enc[..., 1::2])], dim=-1)
+        pos_enc = torch.cat(
+            [torch.cos(pos_enc[..., ::2]), torch.sin(pos_enc[..., 1::2])], dim=-1
+        )
         return pos_enc
 
 
@@ -50,5 +52,7 @@ class PositionalEmbeddingRad(nn.Module):
         """
         # [..., dim]
         pos_enc = x.unsqueeze(-1) * self.freqs.view([1] * x.dim() + [-1])
-        pos_enc = torch.cat([torch.cos(pos_enc[..., ::2]), torch.sin(pos_enc[..., 1::2])], dim=-1)
+        pos_enc = torch.cat(
+            [torch.cos(pos_enc[..., ::2]), torch.sin(pos_enc[..., 1::2])], dim=-1
+        )
         return pos_enc

@@ -7,7 +7,9 @@ from torch import Tensor
 from torchmetrics.metric import Metric
 from google.protobuf import text_format
 from waymo_open_dataset.protos import motion_metrics_pb2
-from waymo_open_dataset.metrics.python.config_util_py import get_breakdown_names_from_motion_config
+from waymo_open_dataset.metrics.python.config_util_py import (
+    get_breakdown_names_from_motion_config,
+)
 from waymo_open_dataset.metrics.ops import py_metrics_ops
 
 
@@ -39,7 +41,13 @@ class WaymoMetrics(Metric):
             step_current, self.track_future_samples
         )
         self.metrics_config = self.metrics_config.SerializeToString()
-        self.metrics_type = ["min_ade", "min_fde", "miss_rate", "overlap_rate", "mean_average_precision"]
+        self.metrics_type = [
+            "min_ade",
+            "min_fde",
+            "miss_rate",
+            "overlap_rate",
+            "mean_average_precision",
+        ]
 
         self.n_agent = n_agent
 
@@ -54,7 +62,9 @@ class WaymoMetrics(Metric):
         self.add_state("prediction_score_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("ground_truth_trajectory_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("ground_truth_is_valid_gpu", default=[], dist_reduce_fx="cat")
-        self.add_state("prediction_ground_truth_indices_mask_gpu", default=[], dist_reduce_fx="cat")
+        self.add_state(
+            "prediction_ground_truth_indices_mask_gpu", default=[], dist_reduce_fx="cat"
+        )
         self.add_state("object_type_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("brier_minADE_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("brier_minFDE_gpu", default=[], dist_reduce_fx="cat")
@@ -70,7 +80,12 @@ class WaymoMetrics(Metric):
             "brier_minFDE": [],
         }
 
-    def update(self, batch: Dict[str, Tensor], pred_traj: Tensor, pred_score: Optional[Tensor] = None) -> None:
+    def update(
+        self,
+        batch: Dict[str, Tensor],
+        pred_traj: Tensor,
+        pred_score: Optional[Tensor] = None,
+    ) -> None:
         """
         pytorch tensors on gpu/cpu
         pred_traj: [n_batch, step_start+1...step_end, n_agent, K, 2]
@@ -79,12 +94,17 @@ class WaymoMetrics(Metric):
         # [n_batch, n_agent]
         mask_pred = batch["agent/role"][..., 2]
         # mask_other = (~mask_pred) & (batch["agent/valid"][:, self.step_current, :].cpu())
-        mask_other = (~mask_pred) & batch["agent/valid"][:, : self.step_current + 1, :].all(1)
+        mask_other = (~mask_pred) & batch["agent/valid"][
+            :, : self.step_current + 1, :
+        ].all(1)
 
         # ! for argoverse 2 evaluation
         batch_idx = torch.arange(pred_score.shape[0])[:, None]
         agent_idx = torch.arange(pred_score.shape[1])[None, :]
-        dist = torch.norm(batch["agent/pos"][:, self.step_current + 1 :].unsqueeze(3) - pred_traj, dim=-1)
+        dist = torch.norm(
+            batch["agent/pos"][:, self.step_current + 1 :].unsqueeze(3) - pred_traj,
+            dim=-1,
+        )
         dist = dist * (batch["agent/valid"][:, self.step_current + 1 :].unsqueeze(-1))
         # brier_minADE
         min_ade, min_idx = dist.mean(1).min(-1)
@@ -94,13 +114,17 @@ class WaymoMetrics(Metric):
         min_fde, min_idx = dist[:, -1].min(-1)
         brier_minFDE = min_fde + (1 - pred_score[batch_idx, agent_idx, min_idx]) ** 2
         # self.brier_minFDE_gpu.append(brier_minFDE[mask_pred])
-        self.brier_minFDE_gpu.append(brier_minFDE[mask_pred & batch["agent/valid"][:, -1]])
+        self.brier_minFDE_gpu.append(
+            brier_minFDE[mask_pred & batch["agent/valid"][:, -1]]
+        )
 
         # gt_traj: [n_batch, n_agent, step_gt, 7]
         gt_traj = torch.cat(
             [
                 batch["agent/pos"],  # [n_batch, n_step, n_agent, 2]
-                batch["agent/size"][..., :2].unsqueeze(1).expand(-1, batch["agent/pos"].shape[1], -1, -1),
+                batch["agent/size"][..., :2]
+                .unsqueeze(1)
+                .expand(-1, batch["agent/pos"].shape[1], -1, -1),
                 batch["agent/yaw_bbox"],  # [n_batch, n_step, n_agent, 1]
                 batch["agent/vel"],  # [n_batch, n_step, n_agent, 2]
             ],
@@ -138,15 +162,25 @@ class WaymoMetrics(Metric):
         device = pred_traj.device
 
         prediction_trajectory = torch.zeros(
-            [n_batch, self.m_joint, n_K, self.n_pred, n_pred_step, 2], dtype=torch.float32, device=device
+            [n_batch, self.m_joint, n_K, self.n_pred, n_pred_step, 2],
+            dtype=torch.float32,
+            device=device,
         )
-        prediction_score = torch.zeros([n_batch, self.m_joint, n_K], dtype=torch.float32, device=device)
-        ground_truth_trajectory = torch.zeros([n_batch, self.n_agent, n_gt_step, 7], dtype=torch.float32, device=device)
-        ground_truth_is_valid = torch.zeros([n_batch, self.n_agent, n_gt_step], dtype=torch.bool, device=device)
+        prediction_score = torch.zeros(
+            [n_batch, self.m_joint, n_K], dtype=torch.float32, device=device
+        )
+        ground_truth_trajectory = torch.zeros(
+            [n_batch, self.n_agent, n_gt_step, 7], dtype=torch.float32, device=device
+        )
+        ground_truth_is_valid = torch.zeros(
+            [n_batch, self.n_agent, n_gt_step], dtype=torch.bool, device=device
+        )
         prediction_ground_truth_indices_mask = torch.zeros(
             [n_batch, self.m_joint, self.n_pred], dtype=torch.bool, device=device
         )
-        object_type = torch.zeros([n_batch, self.n_agent], dtype=torch.float32, device=device)
+        object_type = torch.zeros(
+            [n_batch, self.n_agent], dtype=torch.float32, device=device
+        )
 
         for i in range(n_batch):
             # reorder and reduce ground_truth_trajectory and ground_truth_is_valid, first pred_agent then other_agent
@@ -155,7 +189,9 @@ class WaymoMetrics(Metric):
 
             if self.interactive_challenge:
                 # pred_traj: [n_batch, 1, K, n_agent, steps, 2]
-                prediction_trajectory[i, :, :, :n_pred_agent] = pred_traj[i, :, :, mask_pred[i]]
+                prediction_trajectory[i, :, :, :n_pred_agent] = pred_traj[
+                    i, :, :, mask_pred[i]
+                ]
                 prediction_score[i] = pred_score[i]
                 prediction_ground_truth_indices_mask[i, :, :n_pred_agent] = True
             else:
@@ -166,16 +202,24 @@ class WaymoMetrics(Metric):
 
             ground_truth_trajectory[i, :n_pred_agent] = gt_traj[i][mask_pred[i]]
             ground_truth_is_valid[i, :n_pred_agent] = gt_valid[i][mask_pred[i]]
-            ground_truth_trajectory[i, n_pred_agent : n_pred_agent + n_other_agent] = gt_traj[i][mask_other[i]]
-            ground_truth_is_valid[i, n_pred_agent : n_pred_agent + n_other_agent] = gt_valid[i][mask_other[i]]
+            ground_truth_trajectory[i, n_pred_agent : n_pred_agent + n_other_agent] = (
+                gt_traj[i][mask_other[i]]
+            )
+            ground_truth_is_valid[i, n_pred_agent : n_pred_agent + n_other_agent] = (
+                gt_valid[i][mask_other[i]]
+            )
             object_type[i, :n_pred_agent] = agent_type[i][mask_pred[i]]
-            object_type[i, n_pred_agent : n_pred_agent + n_other_agent] = agent_type[i][mask_other[i]]
+            object_type[i, n_pred_agent : n_pred_agent + n_other_agent] = agent_type[i][
+                mask_other[i]
+            ]
 
         self.prediction_trajectory_gpu.append(prediction_trajectory)
         self.prediction_score_gpu.append(prediction_score)
         self.ground_truth_trajectory_gpu.append(ground_truth_trajectory)
         self.ground_truth_is_valid_gpu.append(ground_truth_is_valid)
-        self.prediction_ground_truth_indices_mask_gpu.append(prediction_ground_truth_indices_mask)
+        self.prediction_ground_truth_indices_mask_gpu.append(
+            prediction_ground_truth_indices_mask
+        )
         self.object_type_gpu.append(object_type)
 
     def compute(self) -> Dict[str, Tensor]:
@@ -216,7 +260,9 @@ class WaymoMetrics(Metric):
             # [1, 8, 1]
             indices = torch.arange(self.m_joint, dtype=torch.int64)[None, :, None]
         # [n_batch, self.m_joint, self.n_pred]
-        ops_inputs["prediction_ground_truth_indices"] = indices.expand(ops_inputs["object_type"].shape[0], -1, -1)
+        ops_inputs["prediction_ground_truth_indices"] = indices.expand(
+            ops_inputs["object_type"].shape[0], -1, -1
+        )
 
         out_dict = {}
         metric_values = py_metrics_ops.motion_metrics(
@@ -225,9 +271,13 @@ class WaymoMetrics(Metric):
             prediction_score=ops_inputs["prediction_score"],
             ground_truth_trajectory=ops_inputs["ground_truth_trajectory"],
             ground_truth_is_valid=ops_inputs["ground_truth_is_valid"],
-            prediction_ground_truth_indices_mask=ops_inputs["prediction_ground_truth_indices_mask"],
+            prediction_ground_truth_indices_mask=ops_inputs[
+                "prediction_ground_truth_indices_mask"
+            ],
             object_type=ops_inputs["object_type"],
-            prediction_ground_truth_indices=ops_inputs["prediction_ground_truth_indices"],
+            prediction_ground_truth_indices=ops_inputs[
+                "prediction_ground_truth_indices"
+            ],
         )
 
         for m_type in self.metrics_type:  # e.g. min_ade
@@ -251,7 +301,9 @@ class WaymoMetrics(Metric):
                     counter_CYCLIST += 1
             out_dict[f"{self.prefix}/{m_type}"] = values.mean()
             out_dict[f"{self.prefix}/veh/{m_type}"] = sum_VEHICLE / counter_VEHICLE
-            out_dict[f"{self.prefix}/ped/{m_type}"] = sum_PEDESTRIAN / counter_PEDESTRIAN
+            out_dict[f"{self.prefix}/ped/{m_type}"] = (
+                sum_PEDESTRIAN / counter_PEDESTRIAN
+            )
             out_dict[f"{self.prefix}/cyc/{m_type}"] = sum_CYCLIST / counter_CYCLIST
         out_dict[f"{self.prefix}/brier_minADE"] = ops_inputs["brier_minADE"].mean()
         out_dict[f"{self.prefix}/brier_minFDE"] = ops_inputs["brier_minFDE"].mean()

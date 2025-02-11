@@ -53,7 +53,9 @@ class DatasetVal(DatasetBase):
                 "scenario_id": hf[idx_key].attrs["scenario_id"],
                 "scenario_center": hf[idx_key].attrs["scenario_center"],
                 "scenario_yaw": hf[idx_key].attrs["scenario_yaw"],
-                "with_map": hf[idx_key].attrs["with_map"],  # some epidosdes in the testing dataset do not have map.
+                "with_map": hf[idx_key].attrs[
+                    "with_map"
+                ],  # some epidosdes in the testing dataset do not have map.
             }
             for k, _size in self.tensor_size.items():
                 if k in hf[idx_key]:
@@ -106,12 +108,23 @@ class DataH5av2(LightningDataModule):
             "agent/pos": (n_step, n_agent, 2),  # float32
             # v[1] = p[1]-p[0]. if p[1] invalid, v[1] also invalid, v[2]=v[3]
             "agent/vel": (n_step, n_agent, 2),  # float32, v_x, v_y
-            "agent/spd": (n_step, n_agent, 1),  # norm of vel, signed using yaw_bbox and vel_xy
+            "agent/spd": (
+                n_step,
+                n_agent,
+                1,
+            ),  # norm of vel, signed using yaw_bbox and vel_xy
             "agent/acc": (n_step, n_agent, 1),  # m/s2, acc[t] = (spd[t]-spd[t-1])/dt
             "agent/yaw_bbox": (n_step, n_agent, 1),  # float32, yaw of the bbox heading
-            "agent/yaw_rate": (n_step, n_agent, 1),  # rad/s, yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
+            "agent/yaw_rate": (
+                n_step,
+                n_agent,
+                1,
+            ),  # rad/s, yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
             # agent attributes
-            "agent/type": (n_agent, 3),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
+            "agent/type": (
+                n_agent,
+                3,
+            ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
             "agent/cmd": (n_agent, 8),  # bool one_hot
             "agent/role": (n_agent, 3),  # bool [sdc=0, interest=1, predict=2]
             "agent/size": (n_agent, 3),  # float32: [length, width, height]
@@ -141,11 +154,30 @@ class DataH5av2(LightningDataModule):
             "history/agent/valid": (n_step_history, n_agent),  # bool,
             "history/agent/pos": (n_step_history, n_agent, 2),  # float32
             "history/agent/vel": (n_step_history, n_agent, 2),  # float32, v_x, v_y
-            "history/agent/spd": (n_step_history, n_agent, 1),  # norm of vel, signed using yaw_bbox and vel_xy
-            "history/agent/acc": (n_step_history, n_agent, 1),  # m/s2, acc[t] = (spd[t]-spd[t-1])/dt
-            "history/agent/yaw_bbox": (n_step_history, n_agent, 1),  # float32, yaw of the bbox heading
-            "history/agent/yaw_rate": (n_step_history, n_agent, 1),  # rad/s, yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
-            "history/agent/type": (n_agent, 3),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
+            "history/agent/spd": (
+                n_step_history,
+                n_agent,
+                1,
+            ),  # norm of vel, signed using yaw_bbox and vel_xy
+            "history/agent/acc": (
+                n_step_history,
+                n_agent,
+                1,
+            ),  # m/s2, acc[t] = (spd[t]-spd[t-1])/dt
+            "history/agent/yaw_bbox": (
+                n_step_history,
+                n_agent,
+                1,
+            ),  # float32, yaw of the bbox heading
+            "history/agent/yaw_rate": (
+                n_step_history,
+                n_agent,
+                1,
+            ),  # rad/s, yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
+            "history/agent/type": (
+                n_agent,
+                3,
+            ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
             "history/agent/role": (n_agent, 3),  # bool [sdc=0, interest=1, predict=2]
             "history/agent/size": (n_agent, 3),  # float32: [length, width, height]
             # agent_no_sim not used by the models currently
@@ -179,17 +211,35 @@ class DataH5av2(LightningDataModule):
             "agent_no_sim/valid": (n_step, n_agent_no_sim),  # bool,
             "agent_no_sim/pos": (n_step, n_agent_no_sim, 2),  # float32
             "agent_no_sim/vel": (n_step, n_agent_no_sim, 2),  # float32, v_x, v_y
-            "agent_no_sim/spd": (n_step, n_agent_no_sim, 1),  # norm of vel, signed using yaw_bbox and vel_xy
-            "agent_no_sim/yaw_bbox": (n_step, n_agent_no_sim, 1),  # float32, yaw of the bbox heading
-            "agent_no_sim/type": (n_agent_no_sim, 3),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
-            "agent_no_sim/size": (n_agent_no_sim, 3),  # float32: [length, width, height]
+            "agent_no_sim/spd": (
+                n_step,
+                n_agent_no_sim,
+                1,
+            ),  # norm of vel, signed using yaw_bbox and vel_xy
+            "agent_no_sim/yaw_bbox": (
+                n_step,
+                n_agent_no_sim,
+                1,
+            ),  # float32, yaw of the bbox heading
+            "agent_no_sim/type": (
+                n_agent_no_sim,
+                3,
+            ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
+            "agent_no_sim/size": (
+                n_agent_no_sim,
+                3,
+            ),  # float32: [length, width, height]
         }
 
-        self.tensor_size_val = self.tensor_size_val | self.tensor_size_train | self.tensor_size_test
+        self.tensor_size_val = (
+            self.tensor_size_val | self.tensor_size_train | self.tensor_size_test
+        )
 
     def setup(self, stage: Optional[str] = None) -> None:
         if stage == "fit" or stage is None:
-            self.train_dataset = DatasetTrain(self.path_train_h5, self.tensor_size_train)
+            self.train_dataset = DatasetTrain(
+                self.path_train_h5, self.tensor_size_train
+            )
             self.val_dataset = DatasetVal(self.path_val_h5, self.tensor_size_val)
         elif stage == "validate":
             self.val_dataset = DatasetVal(self.path_val_h5, self.tensor_size_val)
@@ -197,16 +247,22 @@ class DataH5av2(LightningDataModule):
             self.test_dataset = DatasetVal(self.path_test_h5, self.tensor_size_test)
 
     def train_dataloader(self) -> DataLoader[Any]:
-        return self._get_dataloader(self.train_dataset, self.batch_size, self.num_workers)
+        return self._get_dataloader(
+            self.train_dataset, self.batch_size, self.num_workers
+        )
 
     def val_dataloader(self) -> DataLoader[Any]:
         return self._get_dataloader(self.val_dataset, self.batch_size, self.num_workers)
 
     def test_dataloader(self) -> DataLoader[Any]:
-        return self._get_dataloader(self.test_dataset, self.batch_size, self.num_workers)
+        return self._get_dataloader(
+            self.test_dataset, self.batch_size, self.num_workers
+        )
 
     @staticmethod
-    def _get_dataloader(ds: Dataset, batch_size: int, num_workers: int) -> DataLoader[Any]:
+    def _get_dataloader(
+        ds: Dataset, batch_size: int, num_workers: int
+    ) -> DataLoader[Any]:
         return DataLoader(
             ds,
             batch_size=batch_size,

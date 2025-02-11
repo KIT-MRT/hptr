@@ -94,7 +94,7 @@ def classify_track(
     i1 = len(valid) - 1 - np.flip(valid).argmax()
 
     x, y = pos[i1] - pos[i0]
-    final_displacement = np.sqrt(x ** 2 + y ** 2)
+    final_displacement = np.sqrt(x**2 + y**2)
 
     _c = np.cos(-yaw[i0])
     _s = np.sin(-yaw[i0])
@@ -104,7 +104,10 @@ def classify_track(
     heading_diff = yaw[i1] - yaw[i0]
     max_speed = max(spd[i0], spd[i1])
 
-    if max_speed < kMaxSpeedForStationary and final_displacement < kMaxDisplacementForStationary:
+    if (
+        max_speed < kMaxSpeedForStationary
+        and final_displacement < kMaxDisplacementForStationary
+    ):
         return 0  # TrajectoryType::STATIONARY;
 
     if np.abs(heading_diff) < kMaxAbsHeadingDiffForStraight:
@@ -155,7 +158,9 @@ def pack_episode_map(
         pl_pos = np.array(mf_xyz[i_pl])
         pl_dir = np.diff(pl_pos, axis=0)
         polyline_len = pl_dir.shape[0]
-        polyline_cuts = np.linspace(0, polyline_len, polyline_len // n_nodes + 1, dtype=int, endpoint=False)
+        polyline_cuts = np.linspace(
+            0, polyline_len, polyline_len // n_nodes + 1, dtype=int, endpoint=False
+        )
         num_cuts = len(polyline_cuts)
         for idx_cut in range(num_cuts):
             idx_start = polyline_cuts[idx_cut]
@@ -166,8 +171,12 @@ def pack_episode_map(
                 idx_end = polyline_cuts[idx_cut + 1]
 
             episode["map/valid"][pl_counter, : idx_end - idx_start] = True
-            episode["map/pos"][pl_counter, : idx_end - idx_start] = pl_pos[idx_start:idx_end]
-            episode["map/dir"][pl_counter, : idx_end - idx_start] = pl_dir[idx_start:idx_end]
+            episode["map/pos"][pl_counter, : idx_end - idx_start] = pl_pos[
+                idx_start:idx_end
+            ]
+            episode["map/dir"][pl_counter, : idx_end - idx_start] = pl_dir[
+                idx_start:idx_end
+            ]
             episode["map/type"][pl_counter] = mf_type[i_pl]
             episode["map/id"][pl_counter] = mf_id[i_pl]
             pl_counter += 1
@@ -259,12 +268,18 @@ def pack_episode_agents(
 
     # swap sdc to be the first agent
     sdc_track_index = np.where(data_agent_role[:, 0])[0][0]
-    data_agent_valid[:, [0, sdc_track_index]] = data_agent_valid[:, [sdc_track_index, 0]]
+    data_agent_valid[:, [0, sdc_track_index]] = data_agent_valid[
+        :, [sdc_track_index, 0]
+    ]
     data_agent_pos[:, [0, sdc_track_index]] = data_agent_pos[:, [sdc_track_index, 0]]
     data_agent_vel[:, [0, sdc_track_index]] = data_agent_vel[:, [sdc_track_index, 0]]
     data_agent_spd[:, [0, sdc_track_index]] = data_agent_spd[:, [sdc_track_index, 0]]
-    data_agent_yaw_bbox[:, [0, sdc_track_index]] = data_agent_yaw_bbox[:, [sdc_track_index, 0]]
-    data_agent_object_id[[0, sdc_track_index]] = data_agent_object_id[[sdc_track_index, 0]]
+    data_agent_yaw_bbox[:, [0, sdc_track_index]] = data_agent_yaw_bbox[
+        :, [sdc_track_index, 0]
+    ]
+    data_agent_object_id[[0, sdc_track_index]] = data_agent_object_id[
+        [sdc_track_index, 0]
+    ]
     data_agent_type[[0, sdc_track_index]] = data_agent_type[[sdc_track_index, 0]]
     data_agent_role[[0, sdc_track_index]] = data_agent_role[[sdc_track_index, 0]]
     data_agent_size[[0, sdc_track_index]] = data_agent_size[[sdc_track_index, 0]]
@@ -288,7 +303,9 @@ def pack_episode_agents(
         episode["history/agent/pos"] = data_agent_pos[: step_current + 1].copy()
         episode["history/agent/vel"] = data_agent_vel[: step_current + 1].copy()
         episode["history/agent/spd"] = data_agent_spd[: step_current + 1].copy()
-        episode["history/agent/yaw_bbox"] = data_agent_yaw_bbox[: step_current + 1].copy()
+        episode["history/agent/yaw_bbox"] = data_agent_yaw_bbox[
+            : step_current + 1
+        ].copy()
 
         episode["history/agent/object_id"] = data_agent_object_id.copy()
         episode["history/agent/type"] = data_agent_type.copy()
@@ -378,38 +395,53 @@ def center_at_sdc(
     if rand_yaw > 0:
         sdc_yaw += np.random.uniform(-rand_yaw, rand_yaw)
 
-    to_sdc_se3 = transform_utils.get_transformation_matrix(sdc_center, sdc_yaw)  # for points
+    to_sdc_se3 = transform_utils.get_transformation_matrix(
+        sdc_center, sdc_yaw
+    )  # for points
     to_sdc_yaw = transform_utils.get_yaw_from_se2(to_sdc_se3)  # for vector
     to_sdc_so2 = transform_utils.get_so2_from_se2(to_sdc_se3)  # for angle
 
     # map
-    episode["map/pos"][..., :2][episode["map/valid"]] = transform_utils.transform_points(
-        episode["map/pos"][..., :2][episode["map/valid"]], to_sdc_se3
+    episode["map/pos"][..., :2][episode["map/valid"]] = (
+        transform_utils.transform_points(
+            episode["map/pos"][..., :2][episode["map/valid"]], to_sdc_se3
+        )
     )
-    episode["map/dir"][..., :2][episode["map/valid"]] = transform_utils.transform_points(
-        episode["map/dir"][..., :2][episode["map/valid"]], to_sdc_so2
+    episode["map/dir"][..., :2][episode["map/valid"]] = (
+        transform_utils.transform_points(
+            episode["map/dir"][..., :2][episode["map/valid"]], to_sdc_so2
+        )
     )
 
     for pf in prefix:
         # agent: pos, vel, yaw_bbox
-        episode[pf + "agent/pos"][..., :2][episode[pf + "agent/valid"]] = transform_utils.transform_points(
-            episode[pf + "agent/pos"][..., :2][episode[pf + "agent/valid"]], to_sdc_se3
+        episode[pf + "agent/pos"][..., :2][episode[pf + "agent/valid"]] = (
+            transform_utils.transform_points(
+                episode[pf + "agent/pos"][..., :2][episode[pf + "agent/valid"]],
+                to_sdc_se3,
+            )
         )
-        episode[pf + "agent/vel"][episode[pf + "agent/valid"]] = transform_utils.transform_points(
-            episode[pf + "agent/vel"][episode[pf + "agent/valid"]], to_sdc_so2
+        episode[pf + "agent/vel"][episode[pf + "agent/valid"]] = (
+            transform_utils.transform_points(
+                episode[pf + "agent/vel"][episode[pf + "agent/valid"]], to_sdc_so2
+            )
         )
         episode[pf + "agent/yaw_bbox"][episode[pf + "agent/valid"]] += to_sdc_yaw
         # traffic light: [step, tl, 3]
         key_tl = pf + "tl_stop/pos"
         if key_tl in episode:
-            episode[key_tl][..., :2][episode[pf + "tl_lane/valid"]] = transform_utils.transform_points(
-                episode[key_tl][..., :2][episode[pf + "tl_lane/valid"]], to_sdc_se3
+            episode[key_tl][..., :2][episode[pf + "tl_lane/valid"]] = (
+                transform_utils.transform_points(
+                    episode[key_tl][..., :2][episode[pf + "tl_lane/valid"]], to_sdc_se3
+                )
             )
         if pf == "":
             # goal: x, y, theta
             goal_valid = episode["agent/valid"].any(axis=0)
-            episode["agent/goal"][..., :2][goal_valid] = transform_utils.transform_points(
-                episode["agent/goal"][..., :2][goal_valid], to_sdc_se3
+            episode["agent/goal"][..., :2][goal_valid] = (
+                transform_utils.transform_points(
+                    episode["agent/goal"][..., :2][goal_valid], to_sdc_se3
+                )
             )
             episode["agent/goal"][..., 2][goal_valid] += to_sdc_yaw
 
@@ -441,12 +473,16 @@ def filter_episode_traffic_lights(episode: Dict[str, np.ndarray]) -> None:
         for tl_step in range(n_step):
             for tl_idx in range(n_tl_max):
                 if episode[pf + "tl_lane/valid"][tl_step, tl_idx]:
-                    tl_lane_map_id = episode["map/id"] == episode[pf + "tl_lane/id"][tl_step, tl_idx]
+                    tl_lane_map_id = (
+                        episode["map/id"] == episode[pf + "tl_lane/id"][tl_step, tl_idx]
+                    )
                     if episode["map/valid"][tl_lane_map_id].sum() == 0:
                         episode[pf + "tl_lane/valid"][tl_step, tl_idx] = False
 
 
-def filter_episode_map(episode: Dict[str, np.ndarray], n_pl: int, thresh_map: float, thresh_z: float = 3):
+def filter_episode_map(
+    episode: Dict[str, np.ndarray], n_pl: int, thresh_map: float, thresh_z: float = 3
+):
     """
     Args: episode
         "agent/valid": [n_step, N_AGENT_MAX], bool,
@@ -477,16 +513,28 @@ def filter_episode_map(episode: Dict[str, np.ndarray], n_pl: int, thresh_map: fl
     y_thresh = max(ymax - ymin, thresh_map)
 
     old_map_valid = episode["map/valid"].copy()
-    episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 0] > xmin - x_thresh)
-    episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 0] < xmax + x_thresh)
-    episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 1] > ymin - y_thresh)
-    episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 1] < ymax + y_thresh)
+    episode["map/valid"] = episode["map/valid"] & (
+        episode["map/pos"][..., 0] > xmin - x_thresh
+    )
+    episode["map/valid"] = episode["map/valid"] & (
+        episode["map/pos"][..., 0] < xmax + x_thresh
+    )
+    episode["map/valid"] = episode["map/valid"] & (
+        episode["map/pos"][..., 1] > ymin - y_thresh
+    )
+    episode["map/valid"] = episode["map/valid"] & (
+        episode["map/pos"][..., 1] < ymax + y_thresh
+    )
     if thresh_z > 0:
         zmin = agent_pos_relevant[:, 2].min()
         zmax = agent_pos_relevant[:, 2].max()
         z_thresh = max(zmax - zmin, thresh_z)
-        episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 2] > zmin - z_thresh)
-        episode["map/valid"] = episode["map/valid"] & (episode["map/pos"][..., 2] < zmax + z_thresh)
+        episode["map/valid"] = episode["map/valid"] & (
+            episode["map/pos"][..., 2] > zmin - z_thresh
+        )
+        episode["map/valid"] = episode["map/valid"] & (
+            episode["map/pos"][..., 2] < zmax + z_thresh
+        )
 
     # assert episode["map/valid"].sum() > 0
     if episode["map/valid"].any(1).sum() < 10:
@@ -520,7 +568,10 @@ def filter_episode_map(episode: Dict[str, np.ndarray], n_pl: int, thresh_map: fl
 
 
 def repack_episode_traffic_lights(
-    episode: Dict[str, np.ndarray], episode_reduced: Dict[str, np.ndarray], n_tl: int, n_tl_state: int
+    episode: Dict[str, np.ndarray],
+    episode_reduced: Dict[str, np.ndarray],
+    n_tl: int,
+    n_tl_state: int,
 ) -> None:
     """
     Args: episode
@@ -552,51 +603,84 @@ def repack_episode_traffic_lights(
     for pf in prefix:
         n_step, n_tl_max = episode[pf + "tl_lane/valid"].shape
         # tl_lane
-        episode_reduced[pf + "tl_lane/valid"] = np.zeros([n_step, n_tl], dtype=bool)  # bool
-        episode_reduced[pf + "tl_lane/state"] = np.zeros([n_step, n_tl], dtype=np.int64)  # will be one_hot
-        episode_reduced[pf + "tl_lane/idx"] = np.zeros([n_step, n_tl], dtype=np.int64) - 1  # int, -1 means not valid
+        episode_reduced[pf + "tl_lane/valid"] = np.zeros(
+            [n_step, n_tl], dtype=bool
+        )  # bool
+        episode_reduced[pf + "tl_lane/state"] = np.zeros(
+            [n_step, n_tl], dtype=np.int64
+        )  # will be one_hot
+        episode_reduced[pf + "tl_lane/idx"] = (
+            np.zeros([n_step, n_tl], dtype=np.int64) - 1
+        )  # int, -1 means not valid
         # tl_stop
-        episode_reduced[pf + "tl_stop/valid"] = np.zeros([n_step, n_tl_max], dtype=bool)  # bool
-        episode_reduced[pf + "tl_stop/state"] = np.zeros([n_step, n_tl_max], dtype=np.int64)  # will be one_hot
-        episode_reduced[pf + "tl_stop/pos"] = np.zeros([n_step, n_tl_max, 2], dtype=np.float32)  # x,y
-        episode_reduced[pf + "tl_stop/dir"] = np.zeros([n_step, n_tl_max, 2], dtype=np.float32)  # x,y
+        episode_reduced[pf + "tl_stop/valid"] = np.zeros(
+            [n_step, n_tl_max], dtype=bool
+        )  # bool
+        episode_reduced[pf + "tl_stop/state"] = np.zeros(
+            [n_step, n_tl_max], dtype=np.int64
+        )  # will be one_hot
+        episode_reduced[pf + "tl_stop/pos"] = np.zeros(
+            [n_step, n_tl_max, 2], dtype=np.float32
+        )  # x,y
+        episode_reduced[pf + "tl_stop/dir"] = np.zeros(
+            [n_step, n_tl_max, 2], dtype=np.float32
+        )  # x,y
         for i in range(n_step):
             counter_tl = 0
             counter_tl_stop = 0
             for j in range(n_tl_max):
                 if episode[pf + "tl_lane/valid"][i, j]:
-                    lane_idx = np.where(episode_reduced["map/id"] == episode[pf + "tl_lane/id"][i, j])[0]
+                    lane_idx = np.where(
+                        episode_reduced["map/id"] == episode[pf + "tl_lane/id"][i, j]
+                    )[0]
                     n_lanes = lane_idx.shape[0]
                     # assert counter_tl + n_lanes <= N_TL, print("counter_tl, n_lanes:", counter_tl, n_lanes)
-                    episode_reduced[pf + "tl_lane/valid"][i, counter_tl : counter_tl + n_lanes] = True
-                    episode_reduced[pf + "tl_lane/state"][i, counter_tl : counter_tl + n_lanes] = episode[
-                        pf + "tl_lane/state"
-                    ][i, j]
-                    episode_reduced[pf + "tl_lane/idx"][i, counter_tl : counter_tl + n_lanes] = lane_idx
+                    episode_reduced[pf + "tl_lane/valid"][
+                        i, counter_tl : counter_tl + n_lanes
+                    ] = True
+                    episode_reduced[pf + "tl_lane/state"][
+                        i, counter_tl : counter_tl + n_lanes
+                    ] = episode[pf + "tl_lane/state"][i, j]
+                    episode_reduced[pf + "tl_lane/idx"][
+                        i, counter_tl : counter_tl + n_lanes
+                    ] = lane_idx
                     counter_tl += n_lanes
                     # tl_stop
                     episode_reduced[pf + "tl_stop/valid"][i, counter_tl_stop] = True
-                    episode_reduced[pf + "tl_stop/state"][i, counter_tl_stop] = episode[pf + "tl_lane/state"][i, j]
-                    episode_reduced[pf + "tl_stop/pos"][i, counter_tl_stop] = episode[pf + "tl_stop/pos"][i, j, :2]
-                    episode_reduced[pf + "tl_stop/dir"][i, counter_tl_stop] = episode_reduced["map/dir"][
-                        lane_idx[0], 0, :2
-                    ]
+                    episode_reduced[pf + "tl_stop/state"][i, counter_tl_stop] = episode[
+                        pf + "tl_lane/state"
+                    ][i, j]
+                    episode_reduced[pf + "tl_stop/pos"][i, counter_tl_stop] = episode[
+                        pf + "tl_stop/pos"
+                    ][i, j, :2]
+                    episode_reduced[pf + "tl_stop/dir"][i, counter_tl_stop] = (
+                        episode_reduced["map/dir"][lane_idx[0], 0, :2]
+                    )
                     counter_tl_stop += 1
 
         # one_hot "tl_lane/state" and "tl_stop/state": [N_AGENT, N_AGENT_TYPE], bool
-        episode_reduced[pf + "tl_lane/state"] = np.eye(n_tl_state, dtype=bool)[episode_reduced[pf + "tl_lane/state"]]
-        episode_reduced[pf + "tl_stop/state"] = np.eye(n_tl_state, dtype=bool)[episode_reduced[pf + "tl_stop/state"]]
+        episode_reduced[pf + "tl_lane/state"] = np.eye(n_tl_state, dtype=bool)[
+            episode_reduced[pf + "tl_lane/state"]
+        ]
+        episode_reduced[pf + "tl_stop/state"] = np.eye(n_tl_state, dtype=bool)[
+            episode_reduced[pf + "tl_stop/state"]
+        ]
 
         episode_reduced[pf + "tl_lane/state"] = (
-            episode_reduced[pf + "tl_lane/state"] & episode_reduced[pf + "tl_lane/valid"][:, :, None]
+            episode_reduced[pf + "tl_lane/state"]
+            & episode_reduced[pf + "tl_lane/valid"][:, :, None]
         )
         episode_reduced[pf + "tl_stop/state"] = (
-            episode_reduced[pf + "tl_stop/state"] & episode_reduced[pf + "tl_stop/valid"][:, :, None]
+            episode_reduced[pf + "tl_stop/state"]
+            & episode_reduced[pf + "tl_stop/valid"][:, :, None]
         )
 
 
 def repack_episode_map(
-    episode: Dict[str, np.ndarray], episode_reduced: Dict[str, np.ndarray], n_pl: int, n_pl_type: int
+    episode: Dict[str, np.ndarray],
+    episode_reduced: Dict[str, np.ndarray],
+    n_pl: int,
+    n_pl_type: int,
 ) -> int:
     """
     Args: episode
@@ -610,8 +694,12 @@ def repack_episode_map(
     n_pl_nodes = episode["map/valid"].shape[1]
     episode_reduced["map/valid"] = np.zeros([n_pl, n_pl_nodes], dtype=bool)  # bool
     episode_reduced["map/type"] = np.zeros([n_pl], dtype=np.int64)  # will be one_hot
-    episode_reduced["map/pos"] = np.zeros([n_pl, n_pl_nodes, 2], dtype=np.float32)  # x,y
-    episode_reduced["map/dir"] = np.zeros([n_pl, n_pl_nodes, 2], dtype=np.float32)  # x,y
+    episode_reduced["map/pos"] = np.zeros(
+        [n_pl, n_pl_nodes, 2], dtype=np.float32
+    )  # x,y
+    episode_reduced["map/dir"] = np.zeros(
+        [n_pl, n_pl_nodes, 2], dtype=np.float32
+    )  # x,y
     episode_reduced["map/id"] = np.zeros([n_pl], dtype=np.int64) - 1
 
     map_valid_mask = episode["map/valid"].any(1)
@@ -622,8 +710,12 @@ def repack_episode_map(
     episode_reduced["map/dir"][:n_pl_valid] = episode["map/dir"][map_valid_mask, :, :2]
     episode_reduced["map/id"][:n_pl_valid] = episode["map/id"][map_valid_mask]
     # one_hot "map/type": [N_PL, N_PL_TYPE], bool
-    episode_reduced["map/type"] = np.eye(n_pl_type, dtype=bool)[episode_reduced["map/type"]]
-    episode_reduced["map/type"] = episode_reduced["map/type"] & episode_reduced["map/valid"].any(-1, keepdims=True)
+    episode_reduced["map/type"] = np.eye(n_pl_type, dtype=bool)[
+        episode_reduced["map/type"]
+    ]
+    episode_reduced["map/type"] = episode_reduced["map/type"] & episode_reduced[
+        "map/valid"
+    ].any(-1, keepdims=True)
 
 
 def repack_episode_agents_no_sim(
@@ -634,24 +726,56 @@ def repack_episode_agents_no_sim(
     prefix: str,
 ) -> None:
     n_step = episode[prefix + "agent/valid"].shape[0]
-    episode_reduced[prefix + "agent_no_sim/valid"] = np.zeros([n_step, n_agent_no_sim], dtype=bool)
-    episode_reduced[prefix + "agent_no_sim/pos"] = np.zeros([n_step, n_agent_no_sim, 2], dtype=np.float32)
-    episode_reduced[prefix + "agent_no_sim/vel"] = np.zeros([n_step, n_agent_no_sim, 2], dtype=np.float32)
-    episode_reduced[prefix + "agent_no_sim/spd"] = np.zeros([n_step, n_agent_no_sim, 1], dtype=np.float32)
-    episode_reduced[prefix + "agent_no_sim/yaw_bbox"] = np.zeros([n_step, n_agent_no_sim, 1], dtype=np.float32)
-    episode_reduced[prefix + "agent_no_sim/object_id"] = np.zeros([n_agent_no_sim], dtype=np.int64) - 1
-    episode_reduced[prefix + "agent_no_sim/type"] = np.zeros([n_agent_no_sim, 3], dtype=bool)
-    episode_reduced[prefix + "agent_no_sim/size"] = np.zeros([n_agent_no_sim, 3], dtype=np.float32)
+    episode_reduced[prefix + "agent_no_sim/valid"] = np.zeros(
+        [n_step, n_agent_no_sim], dtype=bool
+    )
+    episode_reduced[prefix + "agent_no_sim/pos"] = np.zeros(
+        [n_step, n_agent_no_sim, 2], dtype=np.float32
+    )
+    episode_reduced[prefix + "agent_no_sim/vel"] = np.zeros(
+        [n_step, n_agent_no_sim, 2], dtype=np.float32
+    )
+    episode_reduced[prefix + "agent_no_sim/spd"] = np.zeros(
+        [n_step, n_agent_no_sim, 1], dtype=np.float32
+    )
+    episode_reduced[prefix + "agent_no_sim/yaw_bbox"] = np.zeros(
+        [n_step, n_agent_no_sim, 1], dtype=np.float32
+    )
+    episode_reduced[prefix + "agent_no_sim/object_id"] = (
+        np.zeros([n_agent_no_sim], dtype=np.int64) - 1
+    )
+    episode_reduced[prefix + "agent_no_sim/type"] = np.zeros(
+        [n_agent_no_sim, 3], dtype=bool
+    )
+    episode_reduced[prefix + "agent_no_sim/size"] = np.zeros(
+        [n_agent_no_sim, 3], dtype=np.float32
+    )
     # no role, no cmd, no goal
     for i, idx in enumerate(np.where(mask_no_sim)[0]):
-        episode_reduced[prefix + "agent_no_sim/valid"][:, i] = episode[prefix + "agent/valid"][:, idx]
-        episode_reduced[prefix + "agent_no_sim/pos"][:, i] = episode[prefix + "agent/pos"][:, idx, :2]
-        episode_reduced[prefix + "agent_no_sim/vel"][:, i] = episode[prefix + "agent/vel"][:, idx]
-        episode_reduced[prefix + "agent_no_sim/spd"][:, i] = episode[prefix + "agent/spd"][:, idx]
-        episode_reduced[prefix + "agent_no_sim/yaw_bbox"][:, i] = episode[prefix + "agent/yaw_bbox"][:, idx]
-        episode_reduced[prefix + "agent_no_sim/object_id"][i] = episode[prefix + "agent/object_id"][idx]
-        episode_reduced[prefix + "agent_no_sim/type"][i] = episode[prefix + "agent/type"][idx]
-        episode_reduced[prefix + "agent_no_sim/size"][i] = episode[prefix + "agent/size"][idx]
+        episode_reduced[prefix + "agent_no_sim/valid"][:, i] = episode[
+            prefix + "agent/valid"
+        ][:, idx]
+        episode_reduced[prefix + "agent_no_sim/pos"][:, i] = episode[
+            prefix + "agent/pos"
+        ][:, idx, :2]
+        episode_reduced[prefix + "agent_no_sim/vel"][:, i] = episode[
+            prefix + "agent/vel"
+        ][:, idx]
+        episode_reduced[prefix + "agent_no_sim/spd"][:, i] = episode[
+            prefix + "agent/spd"
+        ][:, idx]
+        episode_reduced[prefix + "agent_no_sim/yaw_bbox"][:, i] = episode[
+            prefix + "agent/yaw_bbox"
+        ][:, idx]
+        episode_reduced[prefix + "agent_no_sim/object_id"][i] = episode[
+            prefix + "agent/object_id"
+        ][idx]
+        episode_reduced[prefix + "agent_no_sim/type"][i] = episode[
+            prefix + "agent/type"
+        ][idx]
+        episode_reduced[prefix + "agent_no_sim/size"][i] = episode[
+            prefix + "agent/size"
+        ][idx]
 
 
 def repack_episode_agents(
@@ -689,48 +813,78 @@ def repack_episode_agents(
     """
     n_step = episode[prefix + "agent/valid"].shape[0]
     # agent state
-    episode_reduced[prefix + "agent/valid"] = np.zeros([n_step, n_agent], dtype=bool)  # bool,
-    episode_reduced[prefix + "agent/pos"] = np.zeros([n_step, n_agent, 2], dtype=np.float32)  # x,y
-    episode_reduced[prefix + "agent/vel"] = np.zeros([n_step, n_agent, 2], dtype=np.float32)  # v_x, v_y, in m/s
-    episode_reduced[prefix + "agent/spd"] = np.zeros([n_step, n_agent, 1], dtype=np.float32)  # m/s, signed
+    episode_reduced[prefix + "agent/valid"] = np.zeros(
+        [n_step, n_agent], dtype=bool
+    )  # bool,
+    episode_reduced[prefix + "agent/pos"] = np.zeros(
+        [n_step, n_agent, 2], dtype=np.float32
+    )  # x,y
+    episode_reduced[prefix + "agent/vel"] = np.zeros(
+        [n_step, n_agent, 2], dtype=np.float32
+    )  # v_x, v_y, in m/s
+    episode_reduced[prefix + "agent/spd"] = np.zeros(
+        [n_step, n_agent, 1], dtype=np.float32
+    )  # m/s, signed
     # m/s2, acc[t] = (spd[t]-spd[t-1])/dt
-    episode_reduced[prefix + "agent/acc"] = np.zeros([n_step, n_agent, 1], dtype=np.float32)
-    episode_reduced[prefix + "agent/yaw_bbox"] = np.zeros([n_step, n_agent, 1], dtype=np.float32)  # [-pi, pi]
+    episode_reduced[prefix + "agent/acc"] = np.zeros(
+        [n_step, n_agent, 1], dtype=np.float32
+    )
+    episode_reduced[prefix + "agent/yaw_bbox"] = np.zeros(
+        [n_step, n_agent, 1], dtype=np.float32
+    )  # [-pi, pi]
     # yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
-    episode_reduced[prefix + "agent/yaw_rate"] = np.zeros([n_step, n_agent, 1], dtype=np.float32)
+    episode_reduced[prefix + "agent/yaw_rate"] = np.zeros(
+        [n_step, n_agent, 1], dtype=np.float32
+    )
     # agent attribute
-    episode_reduced[prefix + "agent/object_id"] = np.zeros([n_agent], dtype=np.int64) - 1
+    episode_reduced[prefix + "agent/object_id"] = (
+        np.zeros([n_agent], dtype=np.int64) - 1
+    )
     episode_reduced[prefix + "agent/type"] = np.zeros([n_agent, 3], dtype=bool)
     # one hot [sdc=0, interest=1, predict=2]
-    episode_reduced[prefix + "agent/role"] = np.zeros([n_agent, episode[prefix + "agent/role"].shape[-1]], dtype=bool)
-    episode_reduced[prefix + "agent/size"] = np.zeros([n_agent, 3], dtype=np.float32)  # float32 [length, width, height]
+    episode_reduced[prefix + "agent/role"] = np.zeros(
+        [n_agent, episode[prefix + "agent/role"].shape[-1]], dtype=bool
+    )
+    episode_reduced[prefix + "agent/size"] = np.zeros(
+        [n_agent, 3], dtype=np.float32
+    )  # float32 [length, width, height]
 
     if prefix == "":
         episode_reduced["agent/cmd"] = np.zeros([n_agent, N_AGENT_CMD], dtype=bool)
-        episode_reduced["agent/goal"] = np.zeros([n_agent, 4], dtype=np.float32)  # float32 [x, y, theta, v]
-        episode_reduced["agent/dest"] = np.zeros([n_agent], dtype=np.int64)  # index to "map/valid" in [0, N_PL]
+        episode_reduced["agent/goal"] = np.zeros(
+            [n_agent, 4], dtype=np.float32
+        )  # float32 [x, y, theta, v]
+        episode_reduced["agent/dest"] = np.zeros(
+            [n_agent], dtype=np.int64
+        )  # index to "map/valid" in [0, N_PL]
         # ! map info for finding dest
         n_pl, n_pl_node = episode_reduced["map/valid"].shape
-        mask_veh_lane = (episode_reduced["map/type"][:, dim_veh_lanes].any(axis=-1, keepdims=True)) & episode_reduced[
-            "map/valid"
-        ]
+        mask_veh_lane = (
+            episode_reduced["map/type"][:, dim_veh_lanes].any(axis=-1, keepdims=True)
+        ) & episode_reduced["map/valid"]
         pos_veh_lane = episode_reduced["map/pos"][mask_veh_lane]  # [?, 2]
         dir_veh_lane = episode_reduced["map/dir"][mask_veh_lane]  # [?, 2]
-        dir_veh_lane = dir_veh_lane / np.linalg.norm(dir_veh_lane, axis=-1, keepdims=True)
-        map_id_veh_lane = episode_reduced["map/id"][:, None].repeat(n_pl_node, 1)[mask_veh_lane]
+        dir_veh_lane = dir_veh_lane / np.linalg.norm(
+            dir_veh_lane, axis=-1, keepdims=True
+        )
+        map_id_veh_lane = episode_reduced["map/id"][:, None].repeat(n_pl_node, 1)[
+            mask_veh_lane
+        ]
         pl_idx_veh_lane = np.arange(n_pl)[:, None].repeat(n_pl_node, 1)[mask_veh_lane]
         # cyc_lane
-        mask_cyc_lane = (episode_reduced["map/type"][:, dim_cyc_lanes].any(axis=-1, keepdims=True)) & episode_reduced[
-            "map/valid"
-        ]
+        mask_cyc_lane = (
+            episode_reduced["map/type"][:, dim_cyc_lanes].any(axis=-1, keepdims=True)
+        ) & episode_reduced["map/valid"]
         pos_cyc_lane = episode_reduced["map/pos"][mask_cyc_lane]  # [?, 2]
         dir_cyc_lane = episode_reduced["map/dir"][mask_cyc_lane]  # [?, 2]
-        dir_cyc_lane = dir_cyc_lane / np.linalg.norm(dir_cyc_lane, axis=-1, keepdims=True)
+        dir_cyc_lane = dir_cyc_lane / np.linalg.norm(
+            dir_cyc_lane, axis=-1, keepdims=True
+        )
         pl_idx_cyc_lane = np.arange(n_pl)[:, None].repeat(n_pl_node, 1)[mask_cyc_lane]
         # road_edge
-        mask_road_edge = (episode_reduced["map/type"][:, dim_ped_lanes].any(axis=-1, keepdims=True)) & episode_reduced[
-            "map/valid"
-        ]
+        mask_road_edge = (
+            episode_reduced["map/type"][:, dim_ped_lanes].any(axis=-1, keepdims=True)
+        ) & episode_reduced["map/valid"]
         pos_road_edge = episode_reduced["map/pos"][mask_road_edge]  # [?, 2]
         pl_idx_road_edge = np.arange(n_pl)[:, None].repeat(n_pl_node, 1)[mask_road_edge]
 
@@ -741,38 +895,64 @@ def repack_episode_agents(
             step_start = valid_steps[0]
             step_end = valid_steps[-1]
 
-            f_pos = interp1d(valid_steps, episode[prefix + "agent/pos"][valid, idx, :2], axis=0)
-            f_vel = interp1d(valid_steps, episode[prefix + "agent/vel"][valid, idx], axis=0)
-            f_spd = interp1d(valid_steps, episode[prefix + "agent/spd"][valid, idx], axis=0)
+            f_pos = interp1d(
+                valid_steps, episode[prefix + "agent/pos"][valid, idx, :2], axis=0
+            )
+            f_vel = interp1d(
+                valid_steps, episode[prefix + "agent/vel"][valid, idx], axis=0
+            )
+            f_spd = interp1d(
+                valid_steps, episode[prefix + "agent/spd"][valid, idx], axis=0
+            )
             f_yaw_bbox = interp1d(
-                valid_steps, np.unwrap(episode[prefix + "agent/yaw_bbox"][valid, idx], axis=0), axis=0
+                valid_steps,
+                np.unwrap(episode[prefix + "agent/yaw_bbox"][valid, idx], axis=0),
+                axis=0,
             )
 
             x = np.arange(step_start, step_end + 1)
             x_spd = f_spd(x)
             x_yaw = f_yaw_bbox(x)
             episode_reduced[prefix + "agent/valid"][step_start : step_end + 1, i] = True
-            episode_reduced[prefix + "agent/pos"][step_start : step_end + 1, i] = f_pos(x)
-            episode_reduced[prefix + "agent/vel"][step_start : step_end + 1, i] = f_vel(x)
+            episode_reduced[prefix + "agent/pos"][step_start : step_end + 1, i] = f_pos(
+                x
+            )
+            episode_reduced[prefix + "agent/vel"][step_start : step_end + 1, i] = f_vel(
+                x
+            )
             episode_reduced[prefix + "agent/spd"][step_start : step_end + 1, i] = x_spd
-            episode_reduced[prefix + "agent/yaw_bbox"][step_start : step_end + 1, i] = x_yaw
+            episode_reduced[prefix + "agent/yaw_bbox"][
+                step_start : step_end + 1, i
+            ] = x_yaw
 
             x_acc = np.diff(x_spd, axis=0) / 0.1
-            episode_reduced[prefix + "agent/acc"][step_start + 1 : step_end + 1, i] = x_acc
+            episode_reduced[prefix + "agent/acc"][
+                step_start + 1 : step_end + 1, i
+            ] = x_acc
             x_yaw_rate = np.diff(x_yaw, axis=0) / 0.1
-            episode_reduced[prefix + "agent/yaw_rate"][step_start + 1 : step_end + 1, i] = x_yaw_rate
+            episode_reduced[prefix + "agent/yaw_rate"][
+                step_start + 1 : step_end + 1, i
+            ] = x_yaw_rate
 
         else:
             valid_step = np.where(valid)[0][0]
             episode_reduced[prefix + "agent/valid"][valid_step, i] = True
-            episode_reduced[prefix + "agent/pos"][valid_step, i] = episode[prefix + "agent/pos"][valid_step, idx, :2]
-            episode_reduced[prefix + "agent/vel"][valid_step, i] = episode[prefix + "agent/vel"][valid_step, idx]
-            episode_reduced[prefix + "agent/spd"][valid_step, i] = episode[prefix + "agent/spd"][valid_step, idx]
-            episode_reduced[prefix + "agent/yaw_bbox"][valid_step, i] = episode[prefix + "agent/yaw_bbox"][
-                valid_step, idx
-            ]
+            episode_reduced[prefix + "agent/pos"][valid_step, i] = episode[
+                prefix + "agent/pos"
+            ][valid_step, idx, :2]
+            episode_reduced[prefix + "agent/vel"][valid_step, i] = episode[
+                prefix + "agent/vel"
+            ][valid_step, idx]
+            episode_reduced[prefix + "agent/spd"][valid_step, i] = episode[
+                prefix + "agent/spd"
+            ][valid_step, idx]
+            episode_reduced[prefix + "agent/yaw_bbox"][valid_step, i] = episode[
+                prefix + "agent/yaw_bbox"
+            ][valid_step, idx]
 
-        episode_reduced[prefix + "agent/object_id"][i] = episode[prefix + "agent/object_id"][idx]
+        episode_reduced[prefix + "agent/object_id"][i] = episode[
+            prefix + "agent/object_id"
+        ][idx]
         episode_reduced[prefix + "agent/type"][i] = episode[prefix + "agent/type"][idx]
         episode_reduced[prefix + "agent/role"][i] = episode[prefix + "agent/role"][idx]
         episode_reduced[prefix + "agent/size"][i] = episode[prefix + "agent/size"][idx]
@@ -818,16 +998,22 @@ def find_dest(
     if no_pred:
         extended_goal_pos = goal_pos
     else:
-        extended_goal_pos = agent_goal[:2] + goal_heading * agent_goal[3] * 5  # 5 seconds with constant speed
+        extended_goal_pos = (
+            agent_goal[:2] + goal_heading * agent_goal[3] * 5
+        )  # 5 seconds with constant speed
     if agent_type[0]:  # veh
         dist_pos = np.linalg.norm((pos_veh_lane - goal_pos), axis=1)
         dist_rot = np.dot(dir_veh_lane, goal_heading)
         candidate_lanes = (dist_pos < 3) & (dist_rot > 0)
         if candidate_lanes.any():  # associate to a lane, extend with map topology
             if no_pred:
-                idx_dest = pl_idx_veh_lane[candidate_lanes][np.argmin(dist_pos[candidate_lanes])]
+                idx_dest = pl_idx_veh_lane[candidate_lanes][
+                    np.argmin(dist_pos[candidate_lanes])
+                ]
             else:
-                dest_map_id = map_id_veh_lane[candidate_lanes][np.argmin(dist_pos[candidate_lanes])]
+                dest_map_id = map_id_veh_lane[candidate_lanes][
+                    np.argmin(dist_pos[candidate_lanes])
+                ]
                 next_map_id = dest_map_id
                 counter = 0
                 continue_extend = True
@@ -846,19 +1032,31 @@ def find_dest(
                         or (counter > 3)
                     ):
                         continue_extend = False
-                idx_dest = pl_idx_veh_lane[np.where(map_id_veh_lane == dest_map_id)[0][-1]]
+                idx_dest = pl_idx_veh_lane[
+                    np.where(map_id_veh_lane == dest_map_id)[0][-1]
+                ]
         else:  # not associate to a lane, use road edge
-            idx_dest = pl_idx_road_edge[np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()]
+            idx_dest = pl_idx_road_edge[
+                np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()
+            ]
     elif agent_type[1]:  # ped
-        idx_dest = pl_idx_road_edge[np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()]
+        idx_dest = pl_idx_road_edge[
+            np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()
+        ]
     elif agent_type[2]:  # cyc
         dist_pos = np.linalg.norm((pos_cyc_lane - extended_goal_pos), axis=1)
         dist_rot = np.dot(dir_cyc_lane, goal_heading)
         candidate_lanes = (dist_pos < 3) & (dist_rot > 0)
-        if candidate_lanes.any():  # associate to a bike lane, extend with constant vel and find bike lane
-            idx_dest = pl_idx_cyc_lane[candidate_lanes][np.argmin(dist_pos[candidate_lanes])]
+        if (
+            candidate_lanes.any()
+        ):  # associate to a bike lane, extend with constant vel and find bike lane
+            idx_dest = pl_idx_cyc_lane[candidate_lanes][
+                np.argmin(dist_pos[candidate_lanes])
+            ]
         else:  # not associate to a lane, use road edge
-            idx_dest = pl_idx_road_edge[np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()]
+            idx_dest = pl_idx_road_edge[
+                np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()
+            ]
     return idx_dest
 
 
@@ -901,7 +1099,9 @@ def filter_episode_agents(
     thresh_spd = 2 if prefix == "" else 0.5
 
     # ! filter agents not seen in the history.
-    mask_agent_history_not_seen = (~relevant_agent) & ~(agent_valid[: step_current + 1].any(axis=0))
+    mask_agent_history_not_seen = (~relevant_agent) & ~(
+        agent_valid[: step_current + 1].any(axis=0)
+    )
     agent_valid = agent_valid & ~mask_agent_history_not_seen[None, :]
 
     # ! filter agents that have small displacement and large distance to relevant agents or map polylines
@@ -917,9 +1117,9 @@ def filter_episode_agents(
             agent_poses = episode[prefix + "agent/pos"][:, i, :2][agent_valid[:, i]]
             start_pos = agent_poses[0]
             end_pos = agent_poses[-1]
-            far_to_relevant_agent = (np.linalg.norm(agent_pos_relevant - start_pos, axis=1).min() > 20) & (
-                np.linalg.norm(agent_pos_relevant - end_pos, axis=1).min() > 20
-            )
+            far_to_relevant_agent = (
+                np.linalg.norm(agent_pos_relevant - start_pos, axis=1).min() > 20
+            ) & (np.linalg.norm(agent_pos_relevant - end_pos, axis=1).min() > 20)
             far_to_lane = (np.linalg.norm(lane_pos - start_pos, axis=1).min() > 20) & (
                 np.linalg.norm(lane_pos - end_pos, axis=1).min() > 20
             )
@@ -927,9 +1127,9 @@ def filter_episode_agents(
                 agent_valid[:, i] = False
 
     # ! filter parking vehicles that have large distance to relevant agents and lanes
-    mask_veh_lane = (episode_reduced["map/type"][:, dim_veh_lanes].any(axis=-1, keepdims=True)) & episode_reduced[
-        "map/valid"
-    ]
+    mask_veh_lane = (
+        episode_reduced["map/type"][:, dim_veh_lanes].any(axis=-1, keepdims=True)
+    ) & episode_reduced["map/valid"]
     pos_veh_lane = episode_reduced["map/pos"][mask_veh_lane]  # [?, 2]
     dir_veh_lane = episode_reduced["map/dir"][mask_veh_lane]  # [?, 2]
     dir_veh_lane = dir_veh_lane / np.linalg.norm(dir_veh_lane, axis=-1, keepdims=True)
@@ -943,7 +1143,9 @@ def filter_episode_agents(
     for i in range(n_agent_max):
         if mask_vehicle_still[i] and (agent_valid.any(axis=0).sum() > n_agent):
             agent_pos = episode[prefix + "agent/pos"][:, i, :2][agent_valid[:, i]][-1]
-            agent_yaw = episode[prefix + "agent/yaw_bbox"][:, i, 0][agent_valid[:, i]][-1]
+            agent_yaw = episode[prefix + "agent/yaw_bbox"][:, i, 0][agent_valid[:, i]][
+                -1
+            ]
             agent_heading = np.array([np.cos(agent_yaw), np.sin(agent_yaw)])
 
             dist_pos = np.linalg.norm((pos_veh_lane - agent_pos), axis=1)
@@ -951,28 +1153,34 @@ def filter_episode_agents(
             candidate_lanes = (dist_pos < 3) & (dist_rot > 0)
             not_associate_to_lane = ~(candidate_lanes.any())
 
-            far_to_relevant_agent = (np.linalg.norm(agent_pos_relevant - start_pos, axis=1).min() > 10) & (
-                np.linalg.norm(agent_pos_relevant - end_pos, axis=1).min() > 10
-            )
+            far_to_relevant_agent = (
+                np.linalg.norm(agent_pos_relevant - start_pos, axis=1).min() > 10
+            ) & (np.linalg.norm(agent_pos_relevant - end_pos, axis=1).min() > 10)
             if far_to_relevant_agent & not_associate_to_lane:
                 agent_valid[:, i] = False
 
     # ! filter vehicles that have small displacement and large yaw change. Training only.
     if prefix == "" and (agent_valid.any(axis=0).sum() > n_agent):
-        yaw_diff = np.abs(transform_utils.cast_rad(np.diff(episode["agent/yaw_bbox"][..., 0], axis=0))) * (
-            agent_valid[:-1] & agent_valid[1:]
-        )
+        yaw_diff = np.abs(
+            transform_utils.cast_rad(np.diff(episode["agent/yaw_bbox"][..., 0], axis=0))
+        ) * (agent_valid[:-1] & agent_valid[1:])
         max_yaw_diff = yaw_diff.max(axis=0)
-        mask_large_yaw_diff_veh = ((episode["agent/spd"][..., 0].sum(axis=0) * 0.1 < 6) & (max_yaw_diff > 0.5)) | (
-            max_yaw_diff > 1.5
+        mask_large_yaw_diff_veh = (
+            (episode["agent/spd"][..., 0].sum(axis=0) * 0.1 < 6) & (max_yaw_diff > 0.5)
+        ) | (max_yaw_diff > 1.5)
+        mask_large_yaw_diff_veh = mask_large_yaw_diff_veh & (
+            episode["agent/type"][:, 0]
         )
-        mask_large_yaw_diff_veh = mask_large_yaw_diff_veh & (episode["agent/type"][:, 0])
-        mask_large_yaw_diff_ped_cyc = ((episode["agent/spd"][..., 0].sum(axis=0) * 0.1 < 1) & (max_yaw_diff > 0.5)) | (
-            max_yaw_diff > 1.5
+        mask_large_yaw_diff_ped_cyc = (
+            (episode["agent/spd"][..., 0].sum(axis=0) * 0.1 < 1) & (max_yaw_diff > 0.5)
+        ) | (max_yaw_diff > 1.5)
+        mask_large_yaw_diff_ped_cyc = mask_large_yaw_diff_ped_cyc & (
+            episode["agent/type"][:, 1:].any(-1)
         )
-        mask_large_yaw_diff_ped_cyc = mask_large_yaw_diff_ped_cyc & (episode["agent/type"][:, 1:].any(-1))
         mask_agent_large_yaw_change = (
-            (mask_large_yaw_diff_veh | mask_large_yaw_diff_ped_cyc) & (~relevant_agent) & (agent_valid.any(axis=0))
+            (mask_large_yaw_diff_veh | mask_large_yaw_diff_ped_cyc)
+            & (~relevant_agent)
+            & (agent_valid.any(axis=0))
         )
         agent_valid[:, mask_agent_large_yaw_change] = False
 
@@ -984,8 +1192,12 @@ def filter_episode_agents(
                 agent_poses = episode[prefix + "agent/pos"][:, i, :2][agent_valid[:, i]]
                 close_to_relevant_agent = (
                     min(
-                        np.linalg.norm(agent_pos_relevant - agent_poses[0], axis=1).min(),
-                        np.linalg.norm(agent_pos_relevant - agent_poses[-1], axis=1).min(),
+                        np.linalg.norm(
+                            agent_pos_relevant - agent_poses[0], axis=1
+                        ).min(),
+                        np.linalg.norm(
+                            agent_pos_relevant - agent_poses[-1], axis=1
+                        ).min(),
                     )
                     < dist_thresh_agent
                 )

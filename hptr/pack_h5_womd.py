@@ -55,14 +55,18 @@ N_STEP = 91
 STEP_CURRENT = 10
 
 
-def collate_agent_features(tracks, sdc_track_index, track_index_predict, object_id_interest):
+def collate_agent_features(
+    tracks, sdc_track_index, track_index_predict, object_id_interest
+):
     agent_id = []
     agent_type = []
     agent_states = []
     agent_role = []
     for i, _track in enumerate(tracks):
         agent_id.append(_track.id)
-        agent_type.append(_track.object_type - 1)  # [TYPE_VEHICLE=1, TYPE_PEDESTRIAN=2, TYPE_CYCLIST=3] -> [0,1,2]
+        agent_type.append(
+            _track.object_type - 1
+        )  # [TYPE_VEHICLE=1, TYPE_PEDESTRIAN=2, TYPE_CYCLIST=3] -> [0,1,2]
         step_states = []
         for s in _track.states:
             step_states.append(
@@ -106,18 +110,26 @@ def collate_tl_features(tl_features):
                 tl_state = 0  # LANE_STATE_UNKNOWN = 0;
             elif _tl.state in [1, 4]:  # LANE_STATE_ARROW_STOP = 1; LANE_STATE_STOP = 4;
                 tl_state = 1  # LANE_STATE_STOP = 1;
-            elif _tl.state in [2, 5]:  # LANE_STATE_ARROW_CAUTION = 2; LANE_STATE_CAUTION = 5;
+            elif _tl.state in [
+                2,
+                5,
+            ]:  # LANE_STATE_ARROW_CAUTION = 2; LANE_STATE_CAUTION = 5;
                 tl_state = 2  # LANE_STATE_CAUTION = 2;
             elif _tl.state in [3, 6]:  # LANE_STATE_ARROW_GO = 3; LANE_STATE_GO = 6;
                 tl_state = 3  # LANE_STATE_GO = 3;
-            elif _tl.state in [7, 8]:  # LANE_STATE_FLASHING_STOP = 7; LANE_STATE_FLASHING_CAUTION = 8;
+            elif _tl.state in [
+                7,
+                8,
+            ]:  # LANE_STATE_FLASHING_STOP = 7; LANE_STATE_FLASHING_CAUTION = 8;
                 tl_state = 4  # LANE_STATE_FLASHING = 4;
             else:
                 assert ValueError
 
             step_tl_lane_state.append(tl_state)
             step_tl_lane_id.append(_tl.lane)
-            step_tl_stop_point.append([_tl.stop_point.x, _tl.stop_point.y, _tl.stop_point.z])
+            step_tl_stop_point.append(
+                [_tl.stop_point.x, _tl.stop_point.y, _tl.stop_point.z]
+            )
 
         tl_lane_state.append(step_tl_lane_state)
         tl_lane_id.append(step_tl_lane_id)
@@ -132,7 +144,9 @@ def collate_map_features(map_features):
     mf_edge = []
     for mf in map_features:
         feature_data_type = mf.WhichOneof("feature_data")
-        if feature_data_type is None:  # pip install waymo-open-dataset-tf-2-6-0==1.4.9, not updated, should be driveway
+        if (
+            feature_data_type is None
+        ):  # pip install waymo-open-dataset-tf-2-6-0==1.4.9, not updated, should be driveway
             continue
         feature = getattr(mf, feature_data_type)
         if feature_data_type == "lane":
@@ -196,11 +210,17 @@ def collate_map_features(map_features):
 
 def main():
     parser = ArgumentParser(allow_abbrev=True)
-    parser.add_argument("--data-dir", default="/cluster/scratch/zhejzhan/womd_scenario_v_1_2_0")
+    parser.add_argument(
+        "--data-dir", default="/cluster/scratch/zhejzhan/womd_scenario_v_1_2_0"
+    )
     parser.add_argument("--dataset", default="training")
     parser.add_argument("--out-dir", default="/cluster/scratch/zhejzhan/h5_womd_hptr")
-    parser.add_argument("--rand-pos", default=50.0, type=float, help="Meter. Set to -1 to disable.")
-    parser.add_argument("--rand-yaw", default=3.14, type=float, help="Radian. Set to -1 to disable.")
+    parser.add_argument(
+        "--rand-pos", default=50.0, type=float, help="Meter. Set to -1 to disable."
+    )
+    parser.add_argument(
+        "--rand-yaw", default=3.14, type=float, help="Radian. Set to -1 to disable."
+    )
     parser.add_argument("--dest-no-pred", action="store_true")
     args = parser.parse_args()
 
@@ -228,16 +248,29 @@ def main():
     out_h5_path = out_path / (args.dataset + ".h5")
 
     data_path = Path(args.data_dir) / args.dataset
-    dataset = tf.data.TFRecordDataset(sorted([p.as_posix() for p in data_path.glob("*")]), compression_type="")
-    n_pl_max, n_tl_max, n_agent_max, n_agent_sim, n_agent_no_sim, data_len = 0, 0, 0, 0, 0, 0
+    dataset = tf.data.TFRecordDataset(
+        sorted([p.as_posix() for p in data_path.glob("*")]), compression_type=""
+    )
+    n_pl_max, n_tl_max, n_agent_max, n_agent_sim, n_agent_no_sim, data_len = (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
     with h5py.File(out_h5_path, "w") as hf:
         for i, data in tqdm(enumerate(dataset), total=dataset_size[args.dataset]):
 
             scenario = scenario_pb2.Scenario()
             scenario.ParseFromString(data.numpy())
 
-            mf_id, mf_xyz, mf_type, mf_edge = collate_map_features(scenario.map_features)
-            tl_lane_state, tl_lane_id, tl_stop_point = collate_tl_features(scenario.dynamic_map_states)
+            mf_id, mf_xyz, mf_type, mf_edge = collate_map_features(
+                scenario.map_features
+            )
+            tl_lane_state, tl_lane_id, tl_stop_point = collate_tl_features(
+                scenario.dynamic_map_states
+            )
             agent_id, agent_type, agent_states, agent_role = collate_agent_features(
                 scenario.tracks,
                 sdc_track_index=scenario.sdc_track_index,
@@ -247,7 +280,12 @@ def main():
 
             episode = {}
             n_pl = pack_utils.pack_episode_map(
-                episode=episode, mf_id=mf_id, mf_xyz=mf_xyz, mf_type=mf_type, mf_edge=mf_edge, n_pl_max=N_PL_MAX
+                episode=episode,
+                mf_id=mf_id,
+                mf_xyz=mf_xyz,
+                mf_type=mf_type,
+                mf_edge=mf_edge,
+                n_pl_max=N_PL_MAX,
             )
             n_tl = pack_utils.pack_episode_traffic_lights(
                 episode=episode,
@@ -270,7 +308,9 @@ def main():
                 n_agent_max=N_AGENT_MAX,
                 step_current=STEP_CURRENT,
             )
-            scenario_center, scenario_yaw = pack_utils.center_at_sdc(episode, args.rand_pos, args.rand_yaw)
+            scenario_center, scenario_yaw = pack_utils.center_at_sdc(
+                episode, args.rand_pos, args.rand_yaw
+            )
             n_pl_max = max(n_pl_max, n_pl)
             n_tl_max = max(n_tl_max, n_tl)
             n_agent_max = max(n_agent_max, n_agent)
@@ -281,7 +321,9 @@ def main():
             pack_utils.repack_episode_map(episode, episode_reduced, N_PL, N_PL_TYPE)
 
             pack_utils.filter_episode_traffic_lights(episode)
-            pack_utils.repack_episode_traffic_lights(episode, episode_reduced, N_TL, N_TL_STATE)
+            pack_utils.repack_episode_traffic_lights(
+                episode, episode_reduced, N_TL, N_TL_STATE
+            )
 
             if "training" in args.dataset:
                 mask_sim, mask_no_sim = pack_utils.filter_episode_agents(
@@ -325,8 +367,12 @@ def main():
                     dim_ped_lanes=DIM_PED_LANES,
                     dest_no_pred=args.dest_no_pred,
                 )
-                pack_utils.repack_episode_agents(episode, episode_reduced, mask_sim, N_AGENT, "history/")
-                pack_utils.repack_episode_agents_no_sim(episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "")
+                pack_utils.repack_episode_agents(
+                    episode, episode_reduced, mask_sim, N_AGENT, "history/"
+                )
+                pack_utils.repack_episode_agents_no_sim(
+                    episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, ""
+                )
                 pack_utils.repack_episode_agents_no_sim(
                     episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "history/"
                 )
@@ -350,7 +396,9 @@ def main():
                             break
                     mask_no_sim = mask_valid & (~mask_sim)
 
-                pack_utils.repack_episode_agents(episode, episode_reduced, mask_sim, N_AGENT, "history/")
+                pack_utils.repack_episode_agents(
+                    episode, episode_reduced, mask_sim, N_AGENT, "history/"
+                )
                 pack_utils.repack_episode_agents_no_sim(
                     episode, episode_reduced, mask_no_sim, N_AGENT_NO_SIM, "history/"
                 )
@@ -367,7 +415,9 @@ def main():
                 episode_reduced["map/boundary"] = pack_utils.get_map_boundary(
                     episode["history/agent/valid"], episode["history/agent/pos"]
                 )
-                print(f"scenario {i} has no map! map boundary is: {episode_reduced['map/boundary']}")
+                print(
+                    f"scenario {i} has no map! map boundary is: {episode_reduced['map/boundary']}"
+                )
 
             hf_episode = hf.create_group(str(i))
             hf_episode.attrs["scenario_id"] = scenario.scenario_id
@@ -376,13 +426,17 @@ def main():
             hf_episode.attrs["with_map"] = episode_with_map
 
             for k, v in episode_reduced.items():
-                hf_episode.create_dataset(k, data=v, compression="gzip", compression_opts=4, shuffle=True)
+                hf_episode.create_dataset(
+                    k, data=v, compression="gzip", compression_opts=4, shuffle=True
+                )
 
             data_len += 1
 
         print(f"data_len: {data_len}, dataset_size: {dataset_size[args.dataset]}")
         print(f"n_pl_max: {n_pl_max}")
-        print(f"n_agent_max: {n_agent_max}, n_agent_sim: {n_agent_sim}, n_agent_no_sim: {n_agent_no_sim}")
+        print(
+            f"n_agent_max: {n_agent_max}, n_agent_sim: {n_agent_sim}, n_agent_no_sim: {n_agent_no_sim}"
+        )
         hf.attrs["data_len"] = data_len
 
 

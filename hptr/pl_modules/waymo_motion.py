@@ -39,14 +39,20 @@ class WaymoMotion(LightningModule):
         self.pre_processing = []
         pre_proc_kwargs = {}
         for _, v in pre_processing.items():
-            _pre_proc = hydra.utils.instantiate(v, time_step_current=time_step_current, data_size=data_size)
+            _pre_proc = hydra.utils.instantiate(
+                v, time_step_current=time_step_current, data_size=data_size
+            )
             self.pre_processing.append(_pre_proc)
             pre_proc_kwargs |= _pre_proc.model_kwargs
         self.pre_processing = nn.Sequential(*self.pre_processing)
         # model
-        self.model = hydra.utils.instantiate(model, **pre_proc_kwargs, _recursive_=False)
+        self.model = hydra.utils.instantiate(
+            model, **pre_proc_kwargs, _recursive_=False
+        )
         # post_processing
-        self.post_processing = nn.Sequential(*[hydra.utils.instantiate(v) for _, v in post_processing.items()])
+        self.post_processing = nn.Sequential(
+            *[hydra.utils.instantiate(v) for _, v in post_processing.items()]
+        )
         # save submission files
         self.sub_womd = hydra.utils.instantiate(
             sub_womd,
@@ -54,10 +60,15 @@ class WaymoMotion(LightningModule):
             wb_artifact=wb_artifact,
             interactive_challenge=interactive_challenge,
         )
-        self.sub_av2 = hydra.utils.instantiate(sub_av2, k_futures=post_processing.waymo.k_pred)
+        self.sub_av2 = hydra.utils.instantiate(
+            sub_av2, k_futures=post_processing.waymo.k_pred
+        )
         # metrics
         self.train_metric = hydra.utils.instantiate(
-            train_metric, prefix="train", n_decoders=self.model.n_decoders, n_pred=self.model.n_pred
+            train_metric,
+            prefix="train",
+            n_decoders=self.model.n_decoders,
+            n_pred=self.model.n_pred,
         )
         self.waymo_metric = hydra.utils.instantiate(
             waymo_metric,
@@ -71,17 +82,28 @@ class WaymoMotion(LightningModule):
     def training_step(self, batch: Dict[str, Tensor], batch_idx: int) -> Dict:
         with torch.no_grad():
             batch = self.pre_processing(batch)
-            input_dict = {k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k}
+            input_dict = {
+                k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k
+            }
             gt_dict = {k.replace("/", "_"): v for k, v in batch.items() if "gt/" in k}
-            pred_dict = {k.replace("/", "_"): v for k, v in batch.items() if "ref/" in k}
+            pred_dict = {
+                k.replace("/", "_"): v for k, v in batch.items() if "ref/" in k
+            }
 
-        pred_dict["pred_valid"], pred_dict["pred_conf"], pred_dict["pred"] = self.model(**input_dict)
+        pred_dict["pred_valid"], pred_dict["pred_conf"], pred_dict["pred"] = self.model(
+            **input_dict
+        )
         pred_dict = self.post_processing(pred_dict)
 
         metrics_dict = self.train_metric(**pred_dict, **gt_dict)
 
         for k in metrics_dict.keys():
-            if ("error_" in k) or ("loss" in k) or ("counter_traj" in k) or ("counter_conf" in k):
+            if (
+                ("error_" in k)
+                or ("loss" in k)
+                or ("counter_traj" in k)
+                or ("counter_conf" in k)
+            ):
                 self.log(k, metrics_dict[k], on_step=True)
 
         if self.global_rank == 0:
@@ -93,9 +115,19 @@ class WaymoMotion(LightningModule):
                     for j in range(n_p):
                         k_str = f"{self.train_metric.prefix}/{k}_d{i}_p{j}"
                         w.append(metrics_dict[k_str].item())
-                    h = np.histogram(range(n_p), weights=w, density=True, bins=n_p, range=(0, n_p - 1))
+                    h = np.histogram(
+                        range(n_p),
+                        weights=w,
+                        density=True,
+                        bins=n_p,
+                        range=(0, n_p - 1),
+                    )
                     self.logger[0].experiment.log(
-                        {f"{self.train_metric.prefix}/{k}_d{i}": wandb.Histogram(np_histogram=h)}
+                        {
+                            f"{self.train_metric.prefix}/{k}_d{i}": wandb.Histogram(
+                                np_histogram=h
+                            )
+                        }
                     )
 
         return metrics_dict[f"{self.train_metric.prefix}/loss"]
@@ -104,8 +136,12 @@ class WaymoMotion(LightningModule):
         # ! pre-processing
         for _ in range(self.hparams.inference_repeat_n):
             batch = self.pre_processing(batch)
-            input_dict = {k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k}
-            pred_dict = {k.replace("/", "_"): v for k, v in batch.items() if "ref/" in k}
+            input_dict = {
+                k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k
+            }
+            pred_dict = {
+                k.replace("/", "_"): v for k, v in batch.items() if "ref/" in k
+            }
 
         # ! model inference
         pred_dict["pred_valid"], pred_dict["pred_conf"], pred_dict["pred"] = self.model(
@@ -123,7 +159,9 @@ class WaymoMotion(LightningModule):
             return  # measuring FPS for online inference.
 
         # ! waymo metrics
-        waymo_ops_inputs = self.waymo_metric(batch, pred_dict["waymo_trajs"], pred_dict["waymo_scores"])
+        waymo_ops_inputs = self.waymo_metric(
+            batch, pred_dict["waymo_trajs"], pred_dict["waymo_scores"]
+        )
         self.waymo_metric.aggregate_on_cpu(waymo_ops_inputs)
         self.waymo_metric.reset()
 
@@ -133,7 +171,9 @@ class WaymoMotion(LightningModule):
         if self.global_rank == 0 and (batch_idx < self.hparams.n_video_batch):
             vis_eps_idx = list(range(min(pred_dict["waymo_valid"].shape[0], 3)))
             # log all preds only for the first batch
-            k_to_log = min(pred_dict["waymo_trajs"].shape[-2], 6) if batch_idx == 0 else 1
+            k_to_log = (
+                min(pred_dict["waymo_trajs"].shape[-2], 6) if batch_idx == 0 else 1
+            )
             videos, images = self.save_visualizations(
                 prefix="scene",
                 step_current=self.hparams.time_step_current,
@@ -159,7 +199,10 @@ class WaymoMotion(LightningModule):
         epoch_waymo_metrics["epoch"] = self.current_epoch
         for k, v in epoch_waymo_metrics.items():
             self.log(k, v, on_epoch=True)
-        self.log("val/loss", -epoch_waymo_metrics[f"{self.waymo_metric.prefix}/mean_average_precision"])
+        self.log(
+            "val/loss",
+            -epoch_waymo_metrics[f"{self.waymo_metric.prefix}/mean_average_precision"],
+        )
 
         if self.global_rank == 0:
             self.sub_womd.save_sub_files(self.logger[0])
@@ -217,7 +260,9 @@ class WaymoMotion(LightningModule):
         # compute yaw_bbox: [n_scene, n_step-1, n_agent, n_pred, 2]
         if pred_yaw_bbox is None:
             pred_yaw_bbox = torch.diff(pred_trajs, dim=1)
-            pred_yaw_bbox = torch.atan2(pred_yaw_bbox[..., 1], pred_yaw_bbox[..., 0]).unsqueeze(-1)
+            pred_yaw_bbox = torch.atan2(
+                pred_yaw_bbox[..., 1], pred_yaw_bbox[..., 0]
+            ).unsqueeze(-1)
             pred_yaw_bbox = torch.cat([pred_yaw_bbox, pred_yaw_bbox[:, [-1]]], dim=1)
         # to cpu numpy array
         pred_valid = pred_valid.cpu().numpy()
@@ -226,12 +271,21 @@ class WaymoMotion(LightningModule):
         pred_yaw_bbox = pred_yaw_bbox.cpu().numpy()
 
         videos, images = {}, {}
-        vis_eps_idx = range(batch["agent/valid"].shape[0]) if len(vis_eps_idx) == 0 else vis_eps_idx
+        vis_eps_idx = (
+            range(batch["agent/valid"].shape[0])
+            if len(vis_eps_idx) == 0
+            else vis_eps_idx
+        )
         for idx in vis_eps_idx:
             _path = Path(f"video_{batch_idx}-{idx}")
             _path.mkdir(exist_ok=True, parents=True)
             episode = {k: batch_np[k][idx] for k in batch_np.keys()}
-            vis_waymo = VisWaymo(episode["map/valid"], episode["map/type"], episode["map/pos"], episode["map/boundary"])
+            vis_waymo = VisWaymo(
+                episode["map/valid"],
+                episode["map/type"],
+                episode["map/pos"],
+                episode["map/boundary"],
+            )
             for kf in range(k_to_log):
                 prediction = {
                     "step_current": step_current,
@@ -239,11 +293,15 @@ class WaymoMotion(LightningModule):
                     "step_end": step_end,
                     "agent/pos": pred_trajs[idx, :, :, kf, :2],  # [n_step, n_agent, 2]
                     "score": pred_scores[idx, :, kf],  # [n_agent]
-                    "agent/yaw_bbox": pred_yaw_bbox[idx, :, :, kf],  # [n_step,n_agent,1]
+                    "agent/yaw_bbox": pred_yaw_bbox[
+                        idx, :, :, kf
+                    ],  # [n_step,n_agent,1]
                     "agent/valid": pred_valid[idx],  # [n_step,n_agent]
                 }
                 buffer_video = vis_waymo.save_prediction_videos(
-                    f"{_path.name}/{prefix}_K{kf}", episode=episode, prediction=prediction
+                    f"{_path.name}/{prefix}_K{kf}",
+                    episode=episode,
+                    prediction=prediction,
                 )
                 videos.update(buffer_video)
 
@@ -252,17 +310,30 @@ class WaymoMotion(LightningModule):
                 _path.mkdir(exist_ok=True, parents=True)
                 list_type_str = np.array(["veh", "ped", "cyc"])
                 for k_agent in range(pred_valid.shape[-1]):
-                    if pred_valid[idx, :, k_agent].any() and batch_np["agent/role"][idx, k_agent].any():
-                        type_str = list_type_str[batch_np["agent/type"][idx, k_agent]][0]
+                    if (
+                        pred_valid[idx, :, k_agent].any()
+                        and batch_np["agent/role"][idx, k_agent].any()
+                    ):
+                        type_str = list_type_str[batch_np["agent/type"][idx, k_agent]][
+                            0
+                        ]
                         im_path = f"{_path.name}/{prefix}_{type_str}_A{k_agent}.jpg"
                         images[im_path] = vis_waymo.save_prediction_images(
                             im_path=im_path,
                             step_current=step_current,
-                            gt_valid=batch_np["agent/valid"][idx, :, k_agent],  # [n_step]
-                            gt_pos=batch_np["agent/pos"][idx, :, k_agent],  # [n_step, 2]
-                            gt_yaw=batch_np["agent/yaw_bbox"][idx, :, k_agent],  # [n_step, 1]
+                            gt_valid=batch_np["agent/valid"][
+                                idx, :, k_agent
+                            ],  # [n_step]
+                            gt_pos=batch_np["agent/pos"][
+                                idx, :, k_agent
+                            ],  # [n_step, 2]
+                            gt_yaw=batch_np["agent/yaw_bbox"][
+                                idx, :, k_agent
+                            ],  # [n_step, 1]
                             gt_size=batch_np["agent/size"][idx, k_agent],  # [3], lwh
-                            pred_xy=pred_trajs[idx, :, k_agent],  # [n_step_future, n_pred, 2]
+                            pred_xy=pred_trajs[
+                                idx, :, k_agent
+                            ],  # [n_step_future, n_pred, 2]
                             pred_scores=pred_scores[idx, k_agent],  # [n_pred]
                             cmd=batch_np["agent/cmd"][idx, k_agent],
                             episode=episode,
@@ -273,9 +344,13 @@ class WaymoMotion(LightningModule):
     def test_step(self, batch: Dict[str, Tensor], batch_idx: int) -> Dict:
         # ! map can be empty for some scenes, check batch["map/valid"]
         batch = self.pre_processing(batch)
-        input_dict = {k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k}
+        input_dict = {
+            k.split("input/")[-1]: v for k, v in batch.items() if "input/" in k
+        }
         pred_dict = {k.replace("/", "_"): v for k, v in batch.items() if "ref/" in k}
-        pred_dict["pred_valid"], pred_dict["pred_conf"], pred_dict["pred"] = self.model(**input_dict)
+        pred_dict["pred_valid"], pred_dict["pred_conf"], pred_dict["pred"] = self.model(
+            **input_dict
+        )
         pred_dict = self.post_processing(pred_dict)
         self._save_to_submission_files(pred_dict, batch)
 
@@ -285,9 +360,13 @@ class WaymoMotion(LightningModule):
             self.sub_av2.save_sub_files(self.logger[0])
 
     def configure_optimizers(self):
-        optimizer = hydra.utils.instantiate(self.hparams.optimizer, params=self.parameters())
+        optimizer = hydra.utils.instantiate(
+            self.hparams.optimizer, params=self.parameters()
+        )
         scheduler = {
-            "scheduler": hydra.utils.instantiate(self.hparams.lr_scheduler, optimizer=optimizer),
+            "scheduler": hydra.utils.instantiate(
+                self.hparams.lr_scheduler, optimizer=optimizer
+            ),
             "monitor": "val/loss",
             "interval": "epoch",
             "frequency": self.trainer.check_val_every_n_epoch,
@@ -296,7 +375,9 @@ class WaymoMotion(LightningModule):
         return [optimizer], [scheduler]
 
     def log_grad_norm(self, grad_norm_dict: Dict[str, float]) -> None:
-        self.log_dict(grad_norm_dict, on_step=True, on_epoch=False, prog_bar=False, logger=True)
+        self.log_dict(
+            grad_norm_dict, on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
 
     def _save_to_submission_files(self, pred_dict: Dict, batch: Dict) -> None:
         submission_kargs_dict = {

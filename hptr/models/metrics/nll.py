@@ -14,12 +14,14 @@ def compute_nll_mtr(dmean: Tensor, cov: Tensor) -> Tensor:
     sx = cov[..., 0, 0]
     sy = cov[..., 1, 1]
     rho = torch.tanh(cov[..., 1, 0])  # mtr uses clamp to [-0.5, 0.5]
-    one_minus_rho2 = 1 - rho ** 2
+    one_minus_rho2 = 1 - rho**2
     log_prob = (
         torch.log(sx)
         + torch.log(sy)
         + 0.5 * torch.log(one_minus_rho2)
-        + 0.5 / one_minus_rho2 * ((dx / sx) ** 2 + (dy / sy) ** 2 - 2 * rho * dx * dy / (sx * sy))
+        + 0.5
+        / one_minus_rho2
+        * ((dx / sx) ** 2 + (dy / sy) ** 2 - 2 * rho * dx * dy / (sx * sy))
     )
     return log_prob
 
@@ -68,8 +70,12 @@ class NllMetrics(Metric):
 
         for i in range(self.n_decoders):
             for j in range(self.n_pred):
-                self.add_state(f"counter_d{i}_p{j}", default=tensor(0.0), dist_reduce_fx="sum")
-                self.add_state(f"conf_d{i}_p{j}", default=tensor(0.0), dist_reduce_fx="sum")
+                self.add_state(
+                    f"counter_d{i}_p{j}", default=tensor(0.0), dist_reduce_fx="sum"
+                )
+                self.add_state(
+                    f"conf_d{i}_p{j}", default=tensor(0.0), dist_reduce_fx="sum"
+                )
 
     def update(
         self,
@@ -110,24 +116,36 @@ class NllMetrics(Metric):
         """
         n_agent_type = ref_type.shape[-1]
         n_decoder, n_scene, n_agent, n_pred = pred_conf.shape
-        assert (ref_role.any(-1) & pred_valid == ref_role.any(-1)).all(), "All relevat agents shall be predicted!"
+        assert (
+            ref_role.any(-1) & pred_valid == ref_role.any(-1)
+        ).all(), "All relevat agents shall be predicted!"
 
         # ! prepare avails
         avails = ref_role.any(-1)  # [n_scene, n_agent]
         # add rand agents for training
         if self.p_rand_train_agent > 0:
-            avails = avails | (torch.bernoulli(self.p_rand_train_agent * torch.ones_like(avails)).bool())
+            avails = avails | (
+                torch.bernoulli(
+                    self.p_rand_train_agent * torch.ones_like(avails)
+                ).bool()
+            )
         # add long tracked agents for training
         _track_len = gt_valid.sum(-1)  # [n_scene, n_agent]
         for i in range(n_agent_type):
             if self.n_step_add_train_agent[i] > 0:
-                avails = avails | (ref_type[:, :, i] & (_track_len > self.n_step_add_train_agent[i]))
+                avails = avails | (
+                    ref_type[:, :, i] & (_track_len > self.n_step_add_train_agent[i])
+                )
 
         avails = gt_valid & avails.unsqueeze(-1)  # [n_scene, n_agent, n_step_future]
-        avails = avails.unsqueeze(0).expand(n_decoder, -1, -1, -1)  # [n_decoder, n_scene, n_agent, n_step_future]
+        avails = avails.unsqueeze(0).expand(
+            n_decoder, -1, -1, -1
+        )  # [n_decoder, n_scene, n_agent, n_step_future]
         if n_decoder > 1:
             # [n_decoder], randomly train ensembles with 50% of chance
-            mask_ensemble = torch.bernoulli(0.5 * torch.ones_like(pred_conf[:, 0, 0, 0])).bool()
+            mask_ensemble = torch.bernoulli(
+                0.5 * torch.ones_like(pred_conf[:, 0, 0, 0])
+            ).bool()
             # make sure at least one ensemble is trained
             if not mask_ensemble.any():
                 mask_ensemble[torch.randint(0, n_decoder, (1,))] |= True
@@ -148,31 +166,45 @@ class NllMetrics(Metric):
 
         # ! winnter takes all
         with torch.no_grad():
-            decoder_idx = torch.arange(n_decoder)[:, None, None, None]  # [n_decoder, 1, 1, 1]
+            decoder_idx = torch.arange(n_decoder)[
+                :, None, None, None
+            ]  # [n_decoder, 1, 1, 1]
             scene_idx = torch.arange(n_scene)[None, :, None, None]  # [1, n_scene, 1, 1]
             agent_idx = torch.arange(n_agent)[None, None, :, None]  # [1, 1, n_agent, 1]
 
             if "hard" in self.winner_takes_all:
                 # [n_decoder, n_scene, n_agent, n_pred, n_step_future]
                 dist = torch.norm(pred_pos - gt_pos[None, :, :, None, :, :], dim=-1)
-                dist = dist.masked_fill(~avails, 0.0).sum(-1)  # [n_decoder, n_scene, n_agent, n_pred]
+                dist = dist.masked_fill(~avails, 0.0).sum(
+                    -1
+                )  # [n_decoder, n_scene, n_agent, n_pred]
                 if "joint" in self.winner_takes_all:
                     dist = dist.sum(2, keepdim=True)  # [n_decoder, n_scene, 1, n_pred]
                 k_top = int(self.winner_takes_all[-1])
                 i = torch.randint(high=k_top, size=())
                 # [n_decoder, n_scene, n_agent, 1]
-                mode_idx = dist.topk(k_top, dim=-1, largest=False, sorted=False)[1][..., [i]]
+                mode_idx = dist.topk(k_top, dim=-1, largest=False, sorted=False)[1][
+                    ..., [i]
+                ]
             elif self.winner_takes_all == "cmd":
                 assert n_pred == gt_cmd.shape[-1]
-                mode_idx = (gt_cmd + 0.0).argmax(-1, keepdim=True)  # [n_scene, n_agent, 1]
-                mode_idx = mode_idx.unsqueeze(0).expand(n_decoder, -1, -1, -1)  # [n_decoder, n_scene, n_agent, 1]
+                mode_idx = (gt_cmd + 0.0).argmax(
+                    -1, keepdim=True
+                )  # [n_scene, n_agent, 1]
+                mode_idx = mode_idx.unsqueeze(0).expand(
+                    n_decoder, -1, -1, -1
+                )  # [n_decoder, n_scene, n_agent, 1]
 
             # ! save hard assignment histogram: [n_decoder, n_scene, n_agent, n_pred]
-            counter_modes = torch.nn.functional.one_hot(mode_idx.squeeze(-1), self.n_pred)
+            counter_modes = torch.nn.functional.one_hot(
+                mode_idx.squeeze(-1), self.n_pred
+            )
             for i in range(self.n_decoders):
                 for j in range(self.n_pred):
                     x = getattr(self, f"counter_d{i}_p{j}")
-                    x += (counter_modes[i, :, :, j] * (avails[i, :, :, j].any(-1))).sum()
+                    x += (
+                        counter_modes[i, :, :, j] * (avails[i, :, :, j].any(-1))
+                    ).sum()
 
         # ! avails and counter
         # avails: [n_decoder, n_scene, n_agent, n_pred, n_step_future]
@@ -195,39 +227,72 @@ class NllMetrics(Metric):
         pred_conf = pred_conf[decoder_idx, scene_idx, agent_idx, mode_idx]
         focal_gamma_conf = torch.pow(1 - pred_conf, focal_gamma_conf[None, :, :, None])
         w_conf = w_conf[None, :, :, None]
-        self.error_conf += (-torch.log(pred_conf) * w_conf * focal_gamma_conf).masked_fill(~(avails.any(-1)), 0.0).sum()
+        self.error_conf += (
+            (-torch.log(pred_conf) * w_conf * focal_gamma_conf)
+            .masked_fill(~(avails.any(-1)), 0.0)
+            .sum()
+        )
 
         # ! error_pos
         pred_pos = pred_pos[decoder_idx, scene_idx, agent_idx, mode_idx]
         if self.l_pos == "huber":
-            errors_pos = F.huber_loss(pred_pos, gt_pos[None, :, :, None, :, :], reduction="none").sum(-1)
+            errors_pos = F.huber_loss(
+                pred_pos, gt_pos[None, :, :, None, :, :], reduction="none"
+            ).sum(-1)
         elif self.l_pos == "l2":
-            errors_pos = torch.norm(pred_pos - gt_pos[None, :, :, None, :, :], p=2, dim=-1)
+            errors_pos = torch.norm(
+                pred_pos - gt_pos[None, :, :, None, :, :], p=2, dim=-1
+            )
         elif self.l_pos == "nll_mtr":
             pred_cov = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx]
-            errors_pos = compute_nll_mtr(pred_pos - gt_pos[None, :, :, None, :, :], pred_cov)
+            errors_pos = compute_nll_mtr(
+                pred_pos - gt_pos[None, :, :, None, :, :], pred_cov
+            )
         elif self.l_pos == "nll_torch":
-            gmm = MultivariateNormal(pred_pos, scale_tril=pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx])
+            gmm = MultivariateNormal(
+                pred_pos,
+                scale_tril=pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx],
+            )
             errors_pos = -gmm.log_prob(gt_pos[None, :, :, None, :, :])
-        self.error_pos += (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+        self.error_pos += (
+            (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+        )
 
         # ! error_spd
         if sum(self.w_spd) > 0 and pred_spd is not None:
             pred_spd = pred_spd[decoder_idx, scene_idx, agent_idx, mode_idx]
-            errors_spd = F.huber_loss(pred_spd, gt_spd[None, :, :, None, :, :], reduction="none").squeeze(-1)
-            self.error_spd += (errors_spd * w_spd[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+            errors_spd = F.huber_loss(
+                pred_spd, gt_spd[None, :, :, None, :, :], reduction="none"
+            ).squeeze(-1)
+            self.error_spd += (
+                (errors_spd * w_spd[None, :, :, None, None])
+                .masked_fill(~avails, 0.0)
+                .sum()
+            )
 
         # ! error_vel
         if sum(self.w_vel) > 0 and pred_vel is not None:
             pred_vel = pred_vel[decoder_idx, scene_idx, agent_idx, mode_idx]
-            errors_vel = F.huber_loss(pred_vel, gt_vel[None, :, :, None, :, :], reduction="none").sum(-1)
-            self.error_vel += (errors_vel * w_vel[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+            errors_vel = F.huber_loss(
+                pred_vel, gt_vel[None, :, :, None, :, :], reduction="none"
+            ).sum(-1)
+            self.error_vel += (
+                (errors_vel * w_vel[None, :, :, None, None])
+                .masked_fill(~avails, 0.0)
+                .sum()
+            )
 
         # ! error_yaw
         if sum(self.w_yaw) > 0 and pred_yaw_bbox is not None:
             pred_yaw_bbox = pred_yaw_bbox[decoder_idx, scene_idx, agent_idx, mode_idx]
-            errors_yaw = -torch.cos(pred_yaw_bbox - gt_yaw_bbox[None, :, :, None, :, :]).squeeze(-1)
-            self.error_yaw += (errors_yaw * w_yaw[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+            errors_yaw = -torch.cos(
+                pred_yaw_bbox - gt_yaw_bbox[None, :, :, None, :, :]
+            ).squeeze(-1)
+            self.error_yaw += (
+                (errors_yaw * w_yaw[None, :, :, None, None])
+                .masked_fill(~avails, 0.0)
+                .sum()
+            )
 
     def compute(self) -> Dict[str, Tensor]:
 
@@ -246,7 +311,11 @@ class NllMetrics(Metric):
 
         for i in range(self.n_decoders):
             for j in range(self.n_pred):
-                out_dict[f"{self.prefix}/counter_d{i}_p{j}"] = getattr(self, f"counter_d{i}_p{j}")
-                out_dict[f"{self.prefix}/conf_d{i}_p{j}"] = getattr(self, f"conf_d{i}_p{j}")
+                out_dict[f"{self.prefix}/counter_d{i}_p{j}"] = getattr(
+                    self, f"counter_d{i}_p{j}"
+                )
+                out_dict[f"{self.prefix}/conf_d{i}_p{j}"] = getattr(
+                    self, f"conf_d{i}_p{j}"
+                )
 
         return out_dict

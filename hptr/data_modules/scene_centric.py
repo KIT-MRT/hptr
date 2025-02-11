@@ -3,11 +3,22 @@ from typing import Dict
 from omegaconf import DictConfig
 import torch
 from torch import nn, Tensor
-from hptr.utils.transform_utils import torch_rad2rot, torch_pos2local, torch_dir2local, torch_rad2local
+from hptr.utils.transform_utils import (
+    torch_rad2rot,
+    torch_pos2local,
+    torch_dir2local,
+    torch_rad2local,
+)
 
 
 class SceneCentricPreProcessing(nn.Module):
-    def __init__(self, time_step_current: int, data_size: DictConfig, gt_in_local: bool, mask_invalid: bool) -> None:
+    def __init__(
+        self,
+        time_step_current: int,
+        data_size: DictConfig,
+        gt_in_local: bool,
+        mask_invalid: bool,
+    ) -> None:
         super().__init__()
         self.step_current = time_step_current
         self.n_step_hist = time_step_current + 1
@@ -85,11 +96,18 @@ class SceneCentricPreProcessing(nn.Module):
         batch["ref/role"] = batch[prefix + "agent/role"]
 
         last_valid_step = (
-            self.step_current - batch[prefix + "agent/valid"][:, : self.step_current + 1].flip(1).max(1)[1]
+            self.step_current
+            - batch[prefix + "agent/valid"][:, : self.step_current + 1]
+            .flip(1)
+            .max(1)[1]
         )  # [n_scene, n_agent]
         i_scene = torch.arange(batch["ref/type"].shape[0]).unsqueeze(1)  # [n_scene, 1]
         i_agent = torch.arange(batch["ref/type"].shape[1]).unsqueeze(0)  # [1, n_agent]
-        ref_pos = batch[prefix + "agent/pos"][i_scene, last_valid_step, i_agent].unsqueeze(-2).contiguous()
+        ref_pos = (
+            batch[prefix + "agent/pos"][i_scene, last_valid_step, i_agent]
+            .unsqueeze(-2)
+            .contiguous()
+        )
         ref_yaw = batch[prefix + "agent/yaw_bbox"][i_scene, last_valid_step, i_agent]
         ref_rot = torch_rad2rot(ref_yaw.squeeze(-1))
         batch["ref/pos"] = ref_pos
@@ -99,7 +117,9 @@ class SceneCentricPreProcessing(nn.Module):
         # ! prepare agents states
         # [n_scene, n_step, n_agent, ...] -> [n_scene, n_agent, n_step_hist, ...]
         for k in ("valid", "pos", "vel", "spd", "acc", "yaw_bbox", "yaw_rate"):
-            batch[f"sc/agent_{k}"] = batch[f"{prefix}agent/{k}"][:, : self.n_step_hist].transpose(1, 2)
+            batch[f"sc/agent_{k}"] = batch[f"{prefix}agent/{k}"][
+                :, : self.n_step_hist
+            ].transpose(1, 2)
 
         # ! prepare agents attributes
         for k in ("type", "role", "size"):
@@ -109,14 +129,20 @@ class SceneCentricPreProcessing(nn.Module):
         if "agent/valid" in batch.keys():
             batch["gt/cmd"] = batch["agent/cmd"]
             for k in ("valid", "spd", "pos", "vel", "yaw_bbox"):
-                batch[f"gt/{k}"] = batch[f"agent/{k}"][:, self.n_step_hist :].transpose(1, 2).contiguous()
+                batch[f"gt/{k}"] = (
+                    batch[f"agent/{k}"][:, self.n_step_hist :]
+                    .transpose(1, 2)
+                    .contiguous()
+                )
 
             if self.gt_in_local:
                 # [n_scene, n_agent, n_step_hist, 2]
                 batch["gt/pos"] = torch_pos2local(batch["gt/pos"], ref_pos, ref_rot)
                 batch["gt/vel"] = torch_dir2local(batch["gt/vel"], ref_rot)
                 # [n_scene, n_agent, n_step_hist, 1]
-                batch["gt/yaw_bbox"] = torch_rad2local(batch["gt/yaw_bbox"], ref_yaw, cast=False)
+                batch["gt/yaw_bbox"] = torch_rad2local(
+                    batch["gt/yaw_bbox"], ref_yaw, cast=False
+                )
 
         # ! prepare map polylines
         for k in ("valid", "type", "pos", "dir"):
