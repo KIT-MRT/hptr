@@ -2,7 +2,7 @@
 from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor
-from utils.transform_utils import torch_rad2rot, torch_pos2local, torch_rad2local
+from hptr.utils.transform_utils import torch_rad2rot, torch_pos2local, torch_rad2local
 
 
 @torch.no_grad()

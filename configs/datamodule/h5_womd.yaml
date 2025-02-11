@@ -1,4 +1,4 @@
-_target_: data_modules.data_h5_womd.DataH5womd
+_target_: hptr.data_modules.data_h5_womd.DataH5womd
 
 data_dir: /cluster/scratch/zhejzhan/h5_womd_hptr
 filename_train: training

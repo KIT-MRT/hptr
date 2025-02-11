@@ -2,7 +2,7 @@
 from typing import Optional, Tuple
 from torch import Tensor, nn
 from torch.nn import functional as F
-from .attention import AttentionRPE
+from hptr.models.modules.attention import AttentionRPE
 
 
 def _get_activation_fn(activation):

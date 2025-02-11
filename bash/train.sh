@@ -13,7 +13,7 @@ trap "echo sigterm recieved, exiting!" SIGTERM
 
 DATASET_DIR="h5_womd_hptr" 
 run () {
-python -u src/run.py \
+python -u hptr/run.py \
 trainer=womd \
 model=scr_womd \
 datamodule=h5_womd \

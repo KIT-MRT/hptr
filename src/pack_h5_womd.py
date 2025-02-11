@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 from pathlib import Path
 from waymo_open_dataset.protos import scenario_pb2
-import src.utils.pack_h5 as pack_utils
+import hptr.utils.pack_h5 as pack_utils
 import tensorflow as tf
 
 tf.config.set_visible_devices([], "GPU")

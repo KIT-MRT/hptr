@@ -5,7 +5,7 @@ import torch
 from torch import nn, Tensor
 from omegaconf import DictConfig
 from functorch import combine_state_for_ensemble, vmap
-from .mlp import MLP
+from hptr.models.modules.mlp import MLP
 
 
 class DecoderEnsemble(nn.Module):

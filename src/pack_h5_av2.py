@@ -11,7 +11,7 @@ from pathlib import Path
 from av2.datasets.motion_forecasting import scenario_serialization
 from av2.map.map_api import ArgoverseStaticMap
 from av2.geometry.interpolate import interp_arc
-import src.utils.pack_h5 as pack_utils
+import hptr.utils.pack_h5 as pack_utils
 
 # "map/type"
 # VEHICLE = 0

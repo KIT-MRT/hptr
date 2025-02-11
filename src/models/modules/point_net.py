@@ -2,7 +2,7 @@
 from typing import Tuple, List, Optional
 import torch
 from torch import Tensor, nn
-from .mlp import MLP
+from hptr.models.modules.mlp import MLP
 
 
 class PointNet(nn.Module):
