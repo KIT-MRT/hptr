@@ -229,6 +229,8 @@ class DataH5womd(LightningDataModule):
             self.val_dataset = DatasetVal(self.path_val_h5, self.tensor_size_val)
         elif stage == "test":
             self.test_dataset = DatasetVal(self.path_test_h5, self.tensor_size_test)
+        elif stage == "predict":
+            self.val_dataset = DatasetVal(self.path_val_h5, self.tensor_size_val)
 
     def train_dataloader(self) -> DataLoader[Any]:
         return self._get_dataloader(
@@ -242,6 +244,9 @@ class DataH5womd(LightningDataModule):
         return self._get_dataloader(
             self.test_dataset, self.batch_size, self.num_workers
         )
+
+    def predict_dataloader(self) -> DataLoader[Any]:
+        return self._get_dataloader(self.val_dataset, self.batch_size, self.num_workers)
 
     @staticmethod
     def _get_dataloader(
