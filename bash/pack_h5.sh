@@ -11,7 +11,7 @@
 trap "echo sigterm recieved, exiting!" SIGTERM
 
 run () {
-python -u src/pack_h5_womd.py --dataset=training \
+python -u hptr/pack_h5_womd.py --dataset=training \
 --out-dir=/cluster/scratch/zhejzhan/h5_womd_hptr \
 --data-dir=/cluster/scratch/zhejzhan/womd_scenario_v_1_2_0
 }
