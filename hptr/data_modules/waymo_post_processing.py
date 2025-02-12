@@ -12,7 +12,7 @@ class WaymoPostProcessing(nn.Module):
         k_pred: int,
         score_temperature: float,
         mpa_nms_thresh: ListConfig,
-        # mtr_nms_thresh: ListConfig,
+        mtr_nms_thresh: ListConfig,
         # aggr_thresh: ListConfig,
         # n_iter_em: int,
         gt_in_local: bool,
@@ -28,7 +28,7 @@ class WaymoPostProcessing(nn.Module):
         self.k_pred = k_pred
         self.score_temperature = score_temperature
         self.mpa_nms_thresh = list(mpa_nms_thresh)
-        # self.mtr_nms_thresh = list(mtr_nms_thresh)
+        self.mtr_nms_thresh = list(mtr_nms_thresh)
         # self.aggr_thresh = list(aggr_thresh)
         # self.n_iter_em = n_iter_em
         self.gt_in_local = gt_in_local
@@ -62,18 +62,23 @@ class WaymoPostProcessing(nn.Module):
         )  # [n_scene, n_agent, n_decoder*n_pred]
         scores = scores / scores.sum(-1, keepdim=True)  # normalized to prob
         n_scene, n_agent, n_pred, n_step, _ = trajs.shape
-        assert n_pred == self.k_pred
-        # if n_pred > self.k_pred:
-        #     if len(self.aggr_thresh) > 0:
-        #         trajs, scores = self.traj_aggr(
-        #             trajs, scores, self.k_pred, self.aggr_thresh, self.n_iter_em, self.use_ade
-        #         )
-        #     elif len(self.mtr_nms_thresh) > 0:
-        #         trajs, scores = self.mtr_nms(
-        #             trajs, scores, self.k_pred, self.mtr_nms_thresh, self.use_ade, pred_dict["ref_type"]
-        #         )
-        #     else:
-        #         trajs, scores = self.traj_topk(trajs, scores, self.k_pred)
+        # assert n_pred == self.k_pred
+        if n_pred > self.k_pred:
+            # if len(self.aggr_thresh) > 0:
+            #     trajs, scores = self.traj_aggr(
+            #         trajs, scores, self.k_pred, self.aggr_thresh, self.n_iter_em, self.use_ade
+            #     )
+            if len(self.mtr_nms_thresh) > 0:
+                trajs, scores = self.mtr_nms(
+                    trajs,
+                    scores,
+                    self.k_pred,
+                    self.mtr_nms_thresh,
+                    self.use_ade,
+                    pred_dict["ref_type"],
+                )
+            else:
+                trajs, scores = self.traj_topk(trajs, scores, self.k_pred)
 
         # ! manually scale scores if necessary: [n_scene, n_agent, n_pred]
         if len(self.mpa_nms_thresh) > 0:
@@ -210,77 +215,92 @@ class WaymoPostProcessing(nn.Module):
         scores = scores / scores.sum(-1, keepdim=True)
         return scores
 
-    # @staticmethod
-    # def mtr_nms(
-    #     trajs: Tensor, scores: Tensor, k_pred: int, type_thresh: float, use_ade: bool, agent_type: Tensor
-    # ) -> Tuple[Tensor, Tensor]:
-    #     """
-    #     Args:
-    #         trajs: [n_scene, n_agent, n_pred, n_step, 2], in local coordinate
-    #         scores: [n_scene, n_agent, n_pred], normalized prob
-    #         k_pred: int
-    #         type_thresh: in meters, list, len=3 [veh, ped, cyc].
-    #         agent_type: [n_scene, n_agent, 3], [veh, ped, cyc].
+    @staticmethod
+    def mtr_nms(
+        trajs: Tensor,
+        scores: Tensor,
+        k_pred: int,
+        type_thresh: float,
+        use_ade: bool,
+        agent_type: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Args:
+            trajs: [n_scene, n_agent, n_pred, n_step, 2], in local coordinate
+            scores: [n_scene, n_agent, n_pred], normalized prob
+            k_pred: int
+            type_thresh: in meters, list, len=3 [veh, ped, cyc].
+            agent_type: [n_scene, n_agent, 3], [veh, ped, cyc].
 
-    #     Returns:
-    #         trajs_k: [n_scene, n_agent, k_pred, n_step, 2], in local coordinate
-    #         scores_k: [n_scene, n_agent, k_pred], normalized prob
-    #     """
-    #     # ! type dependent thresh
-    #     thresh = 0
-    #     for i in range(len(type_thresh)):
-    #         thresh += agent_type[:, :, i] * type_thresh[i]
-    #     thresh = thresh[:, :, None, None]  # [n_scene, n_agent, 1, 1]
-    #     # within_dist: [n_scene, n_agent, n_pred, n_pred]
-    #     if use_ade:
-    #         within_dist = (torch.norm(trajs.unsqueeze(2) - trajs.unsqueeze(3), dim=-1).mean(-1)) < thresh
-    #     else:
-    #         within_dist = torch.norm(trajs[:, :, :, -1].unsqueeze(2) - trajs[:, :, :, -1].unsqueeze(3), dim=-1) < thresh
+        Returns:
+            trajs_k: [n_scene, n_agent, k_pred, n_step, 2], in local coordinate
+            scores_k: [n_scene, n_agent, k_pred], normalized prob
+        """
+        # ! type dependent thresh
+        thresh = 0
+        for i in range(len(type_thresh)):
+            thresh += agent_type[:, :, i] * type_thresh[i]
+        thresh = thresh[:, :, None, None]  # [n_scene, n_agent, 1, 1]
+        # within_dist: [n_scene, n_agent, n_pred, n_pred]
+        if use_ade:
+            within_dist = (
+                torch.norm(trajs.unsqueeze(2) - trajs.unsqueeze(3), dim=-1).mean(-1)
+            ) < thresh
+        else:
+            within_dist = (
+                torch.norm(
+                    trajs[:, :, :, -1].unsqueeze(2) - trajs[:, :, :, -1].unsqueeze(3),
+                    dim=-1,
+                )
+                < thresh
+            )
 
-    #     # ! compute mode_idx: [n_scene, n_agent, k_pred]
-    #     scene_idx = torch.arange(scores.shape[0]).unsqueeze(1)  # [n_scene, 1]
-    #     agent_idx = torch.arange(scores.shape[1]).unsqueeze(0)  # [1, n_agent]
-    #     mode_idx = []
-    #     scores_clone = scores.clone()
-    #     for _ in range(k_pred):
-    #         # [n_scene, n_agent]
-    #         _idx = scores_clone.max(-1)[1]
-    #         # [n_scene, n_agent, n_pred], True entry has w=0.01, False entry has w=1.0
-    #         w_mask = ~(within_dist[scene_idx, agent_idx, _idx]) * 0.99 + 0.01
-    #         # [n_scene, n_agent, n_pred], suppress all preds close to the selected one, by multiplying the prob by 0.1
-    #         scores_clone *= w_mask
-    #         scores_clone[scene_idx, agent_idx, _idx] = -1
-    #         # append to mode_idx
-    #         mode_idx.append(_idx)
+        # ! compute mode_idx: [n_scene, n_agent, k_pred]
+        scene_idx = torch.arange(scores.shape[0]).unsqueeze(1)  # [n_scene, 1]
+        agent_idx = torch.arange(scores.shape[1]).unsqueeze(0)  # [1, n_agent]
+        mode_idx = []
+        scores_clone = scores.clone()
+        for _ in range(k_pred):
+            # [n_scene, n_agent]
+            _idx = scores_clone.max(-1)[1]
+            # [n_scene, n_agent, n_pred], True entry has w=0.01, False entry has w=1.0
+            w_mask = ~(within_dist[scene_idx, agent_idx, _idx]) * 0.99 + 0.01
+            # [n_scene, n_agent, n_pred], suppress all preds close to the selected one, by multiplying the prob by 0.1
+            scores_clone *= w_mask
+            scores_clone[scene_idx, agent_idx, _idx] = -1
+            # append to mode_idx
+            mode_idx.append(_idx)
 
-    #     mode_idx = torch.stack(mode_idx, dim=-1)  # [n_scene, n_agent, k_pred]
-    #     scene_idx = scene_idx.unsqueeze(-1)  # [n_scene, 1, 1]
-    #     agent_idx = agent_idx.unsqueeze(-1)  # [1, n_agent, 1]
-    #     trajs_k = trajs[scene_idx, agent_idx, mode_idx]
-    #     scores_k = scores[scene_idx, agent_idx, mode_idx]
-    #     scores_k = scores_k / scores_k.sum(-1, keepdim=True)
-    #     return trajs_k, scores_k
+        mode_idx = torch.stack(mode_idx, dim=-1)  # [n_scene, n_agent, k_pred]
+        scene_idx = scene_idx.unsqueeze(-1)  # [n_scene, 1, 1]
+        agent_idx = agent_idx.unsqueeze(-1)  # [1, n_agent, 1]
+        trajs_k = trajs[scene_idx, agent_idx, mode_idx]
+        scores_k = scores[scene_idx, agent_idx, mode_idx]
+        scores_k = scores_k / scores_k.sum(-1, keepdim=True)
+        return trajs_k, scores_k
 
-    # @staticmethod
-    # def traj_topk(trajs: Tensor, scores: Tensor, k_pred: int) -> Tuple[Tensor, Tensor]:
-    #     """
-    #     Args:
-    #         trajs: [n_scene, n_agent, n_pred, n_step, 2], in local coordinate
-    #         scores: [n_scene, n_agent, n_pred], normalized prob
-    #         k_pred: int
+    @staticmethod
+    def traj_topk(trajs: Tensor, scores: Tensor, k_pred: int) -> Tuple[Tensor, Tensor]:
+        """
+        Args:
+            trajs: [n_scene, n_agent, n_pred, n_step, 2], in local coordinate
+            scores: [n_scene, n_agent, n_pred], normalized prob
+            k_pred: int
 
-    #     Returns:
-    #         trajs_k: [n_scene, n_agent, k_pred, n_step, 2], in local coordinate
-    #         scores_k: [n_scene, n_agent, k_pred], normalized prob
-    #     """
-    #     scene_idx = torch.arange(scores.shape[0])[:, None, None]  # [n_scene, 1, 1]
-    #     agent_idx = torch.arange(scores.shape[1])[None, :, None]  # [1, n_agent, 1]
-    #     mode_idx = scores.topk(k_pred, dim=-1, sorted=False)[1]  # [n_scene, n_agent, k_pred]
-    #     trajs_k = trajs[scene_idx, agent_idx, mode_idx]
-    #     scores_k = scores[scene_idx, agent_idx, mode_idx]
+        Returns:
+            trajs_k: [n_scene, n_agent, k_pred, n_step, 2], in local coordinate
+            scores_k: [n_scene, n_agent, k_pred], normalized prob
+        """
+        scene_idx = torch.arange(scores.shape[0])[:, None, None]  # [n_scene, 1, 1]
+        agent_idx = torch.arange(scores.shape[1])[None, :, None]  # [1, n_agent, 1]
+        mode_idx = scores.topk(k_pred, dim=-1, sorted=False)[
+            1
+        ]  # [n_scene, n_agent, k_pred]
+        trajs_k = trajs[scene_idx, agent_idx, mode_idx]
+        scores_k = scores[scene_idx, agent_idx, mode_idx]
 
-    #     scores_k = scores_k / scores_k.sum(-1, keepdim=True)
-    #     return trajs_k, scores_k
+        scores_k = scores_k / scores_k.sum(-1, keepdim=True)
+        return trajs_k, scores_k
 
     # @staticmethod
     # def traj_aggr(
