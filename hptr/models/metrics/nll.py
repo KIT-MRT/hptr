@@ -248,6 +248,14 @@ class NllMetrics(Metric):
             errors_pos = compute_nll_mtr(
                 pred_pos - gt_pos[None, :, :, None, :, :], pred_cov
             )
+        elif self.l_pos == "nll_and_l1_mtr":
+            pred_cov = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx]
+            errors_pos = compute_nll_mtr(
+                pred_pos - gt_pos[None, :, :, None, :, :], pred_cov
+            )
+            errors_pos = errors_pos + torch.norm(
+                pred_pos - gt_pos[None, :, :, None, :, :], p=1, dim=-1
+            )
         elif self.l_pos == "nll_torch":
             gmm = MultivariateNormal(
                 pred_pos,
