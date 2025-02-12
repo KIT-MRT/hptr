@@ -33,7 +33,12 @@ class SubWOMD:
             for _k in range(1, k_futures + 1):
                 self.submissions[_k] = motion_submission_pb2.MotionChallengeSubmission()
                 self.submissions[_k].account_name = account_name
-                self.submissions[_k].unique_method_name = f"{method_name}_K{_k}"
+                if _k == 6:  # 6 preds = default
+                    self.submissions[_k].unique_method_name = method_name
+                else:
+                    self.submissions[_k].unique_method_name = (
+                        f"{method_name} (K = {_k})"
+                    )
                 self.submissions[_k].authors.extend(list(authors))
                 self.submissions[_k].affiliation = affiliation
                 self.submissions[_k].description = description
