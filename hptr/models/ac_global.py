@@ -4,11 +4,11 @@ import numpy as np
 import torch
 from torch import nn, Tensor
 from omegaconf import DictConfig
-from hptr.models.modules.mlp import MLP
-from hptr.models.modules.point_net import PointNet
-from hptr.models.modules.transformer import TransformerBlock
-from hptr.models.modules.decoder_ensemble import DecoderEnsemble, MLPHead
-from hptr.models.modules.multi_modal import MultiModalAnchors
+from hptr_modules.models.modules.mlp import MLP
+from hptr_modules.models.modules.point_net import PointNet
+from hptr_modules.models.modules.transformer import TransformerBlock
+from hptr_modules.models.modules.decoder_ensemble import DecoderEnsemble, MLPHead
+from hptr_modules.models.modules.multi_modal import MultiModalAnchors
 
 
 class Decoder(nn.Module):

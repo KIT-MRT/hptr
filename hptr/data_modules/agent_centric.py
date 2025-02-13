@@ -3,7 +3,7 @@ from typing import Dict
 from omegaconf import DictConfig
 import torch
 from torch import nn, Tensor
-from hptr.utils.transform_utils import (
+from hptr_modules.utils.transform_utils import (
     torch_rad2rot,
     torch_pos2local,
     torch_dir2local,

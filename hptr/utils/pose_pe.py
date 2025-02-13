@@ -1,7 +1,10 @@
 # Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
 import torch
 from torch import Tensor, nn
-from hptr.models.modules.pos_emb import PositionalEmbedding, PositionalEmbeddingRad
+from hptr_modules.models.modules.pos_emb import (
+    PositionalEmbedding,
+    PositionalEmbeddingRad,
+)
 
 
 class PosePE(nn.Module):

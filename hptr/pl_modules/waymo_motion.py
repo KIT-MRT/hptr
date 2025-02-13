@@ -8,7 +8,7 @@ from torch import Tensor, nn
 import numpy as np
 import wandb
 from pathlib import Path
-from hptr.utils.vis_waymo import VisWaymo
+from hptr_modules.utils.vis_waymo import VisWaymo
 
 
 class WaymoMotion(LightningModule):

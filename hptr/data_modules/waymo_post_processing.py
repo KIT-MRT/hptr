@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 from omegaconf import ListConfig
 import torch
 from torch import nn, Tensor
-from hptr.utils.transform_utils import torch_pos2global, torch_rad2global
+from hptr_modules.utils.transform_utils import torch_pos2global, torch_rad2global
 
 
 class WaymoPostProcessing(nn.Module):

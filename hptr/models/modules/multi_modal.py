@@ -1,7 +1,7 @@
 # Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
 import torch
 from torch import Tensor, nn
-from hptr.models.modules.mlp import MLP
+from hptr_modules.models.modules.mlp import MLP
 
 
 class MultiModalAnchors(nn.Module):
