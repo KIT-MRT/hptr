@@ -58,27 +58,33 @@ class MLPHead(nn.Module):
         out_mlp_batchnorm: bool,
         use_agent_type: bool,
         predictions: List[str],
+        dct_only_for_pos: bool = False,
         **kwargs,
     ) -> None:
         super().__init__()
         self.use_agent_type = use_agent_type
         self.n_step_future = n_step_future
 
-        self.pred_dim = 0
-        if "pos" in predictions:
-            self.pred_dim += 2
-        if "spd" in predictions:
-            self.pred_dim += 1
-        if "vel" in predictions:
-            self.pred_dim += 2
-        if "yaw_bbox" in predictions:
-            self.pred_dim += 1
-        if "cov1" in predictions:
-            self.pred_dim += 1
-        elif "cov2" in predictions:
-            self.pred_dim += 2
-        elif "cov3" in predictions:
-            self.pred_dim += 3
+        if dct_only_for_pos:
+            # Both dct coeffs for pos and density params are stored in n_step_future, yet with different frequencies
+            # opt. TODO find more intuitive implementation
+            self.pred_dim = 1
+        else:
+            self.pred_dim = 0
+            if "pos" in predictions:
+                self.pred_dim += 2
+            if "spd" in predictions:
+                self.pred_dim += 1
+            if "vel" in predictions:
+                self.pred_dim += 2
+            if "yaw_bbox" in predictions:
+                self.pred_dim += 1
+            if "cov1" in predictions:
+                self.pred_dim += 1
+            elif "cov2" in predictions:
+                self.pred_dim += 2
+            elif "cov3" in predictions:
+                self.pred_dim += 3
 
         _d = hidden_dim * 2
         cfg_mlp_pred = {
