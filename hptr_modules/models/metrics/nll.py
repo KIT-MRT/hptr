@@ -1,11 +1,14 @@
 # Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
 import torch
+
 from omegaconf import ListConfig
-from typing import Dict, Optional
 from torch import Tensor, tensor
+from typing import Dict, Optional
 from torch.nn import functional as F
 from torchmetrics.metric import Metric
 from torch.distributions import MultivariateNormal
+
+from einops import rearrange, repeat
 
 
 def compute_nll_mtr(dmean: Tensor, cov: Tensor) -> Tensor:
@@ -44,6 +47,7 @@ class NllMetrics(Metric):
         w_yaw: ListConfig,  # cos
         w_spd: ListConfig,  # huber
         w_vel: ListConfig,  # huber
+        pairwise_joint: bool = False,
     ) -> None:
         super().__init__(dist_sync_on_step=False)
         self.prefix = prefix
@@ -59,6 +63,8 @@ class NllMetrics(Metric):
         self.w_yaw = list(w_yaw)
         self.w_spd = list(w_spd)
         self.w_vel = list(w_vel)
+        
+        self.pairwise_joint = pairwise_joint
 
         self.add_state("counter_traj", default=tensor(0.0), dist_reduce_fx="sum")
         self.add_state("counter_conf", default=tensor(0.0), dist_reduce_fx="sum")
@@ -116,12 +122,24 @@ class NllMetrics(Metric):
         """
         n_agent_type = ref_type.shape[-1]
         n_decoder, n_scene, n_agent, n_pred = pred_conf.shape
-        assert (
-            ref_role.any(-1) & pred_valid == ref_role.any(-1)
-        ).all(), "All relevat agents shall be predicted!"
-
+        
         # ! prepare avails
         avails = ref_role.any(-1)  # [n_scene, n_agent]
+        
+        if self.pairwise_joint:
+            gt_valid = gt_valid[kwargs["to_predict"]]
+            gt_pos = gt_pos[kwargs["to_predict"]]
+            gt_valid = rearrange(gt_valid, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
+            gt_pos = rearrange(gt_pos, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
+            
+            ref_type = ref_type[kwargs["to_predict"]] # Since w_conf, w_pos etc. are based on the shape of ref_type
+            ref_type = rearrange(ref_type, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
+            avails = pred_valid
+        else:
+            assert (
+                ref_role.any(-1) & pred_valid == ref_role.any(-1)
+            ).all(), "All relevat agents shall be predicted!"
+
         # add rand agents for training
         if self.p_rand_train_agent > 0:
             avails = avails | (
