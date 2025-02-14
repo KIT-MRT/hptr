@@ -280,6 +280,23 @@ class NllMetrics(Metric):
                 scale_tril=pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx],
             )
             errors_pos = -gmm.log_prob(gt_pos[None, :, :, None, :, :])
+        elif self.l_pos == "nll_laplace":
+            scale = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx]
+            # pred_pos.shape = [..., 80, 2]
+            # pred_cov.shape = [..., 80, 2, 2] for cov1/2/3
+            # same shape as always in matrix form -> diagonal elements are covs offdiagonal is rho (rotation)
+            # for Laplace distribution: configure as cov2 and reuse diagonal elements as scale factor b (https://en.wikipedia.org/wiki/Laplace_distribution)            
+            scale = torch.cat((scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1) # Since scale and pred_pos must have the same shape
+
+            with torch.no_grad():
+                scale.clamp_(min=1e-6)
+            
+            # Src: https://github.com/ZikangZhou/QCNet/blob/main/losses/laplace_nll_loss.py            
+            nll = torch.log(2 * scale) + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
+            
+            errors_pos = nll.sum(dim=-1)
+        
+        
         self.error_pos += (
             (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
         )
