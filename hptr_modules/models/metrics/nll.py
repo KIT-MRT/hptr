@@ -73,6 +73,9 @@ class NllMetrics(Metric):
         self.add_state("error_yaw", default=tensor(0.0), dist_reduce_fx="sum")
         self.add_state("error_spd", default=tensor(0.0), dist_reduce_fx="sum")
         self.add_state("error_vel", default=tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("exp_power_gate", default=tensor(0.0), dist_reduce_fx="mean")
+        self.add_state("scale_x", default=tensor(0.0), dist_reduce_fx="mean")
+        self.add_state("scale_y", default=tensor(0.0), dist_reduce_fx="mean")
 
         for i in range(self.n_decoders):
             for j in range(self.n_pred):
@@ -295,7 +298,30 @@ class NllMetrics(Metric):
             nll = torch.log(2 * scale) + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
             
             errors_pos = nll.sum(dim=-1)
-        
+        elif self.l_pos == "nll_exp_power_like":
+            gmm_cov = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx].clone()
+            gmm_cov[..., 1, 0] = 0 # set rho to 0 as it is used as gate not rho
+            gmm = MultivariateNormal(pred_pos, scale_tril=gmm_cov)
+            nll_normal = -gmm.log_prob(gt_pos[None, :, :, None, :, :])
+            
+            scale = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx]
+            # for paper debug etc
+            scale_x = scale[..., 0, 0]
+            scale_y = scale[..., 1, 1]           
+            scale = torch.cat((scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1) # Since scale and pred_pos must have the same shape
+            gate = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx][..., 1, 0]
+
+            with torch.no_grad():
+                scale.clamp_(min=1e-6)
+                gate.clamp_(min=0, max=1)
+            
+            self.exp_power_gate = gate.mean()
+            self.scale_x = scale_x.mean()
+            self.scale_y = scale_y.mean()
+                     
+            nll_laplace = torch.log(2 * scale) + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
+            
+            errors_pos = gate * nll_normal + (1 - gate) * nll_laplace.sum(dim=-1)
         
         self.error_pos += (
             (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
@@ -347,6 +373,9 @@ class NllMetrics(Metric):
             f"{self.prefix}/error_yaw": self.error_yaw,
             f"{self.prefix}/error_spd": self.error_spd,
             f"{self.prefix}/error_vel": self.error_vel,
+            f"{self.prefix}/exp_power_gate": self.exp_power_gate,
+            f"{self.prefix}/scale_x": self.scale_x,
+            f"{self.prefix}/scale_y": self.scale_y,
         }
         out_dict[f"{self.prefix}/loss"] = (
             self.error_pos + self.error_yaw + self.error_spd + self.error_vel
