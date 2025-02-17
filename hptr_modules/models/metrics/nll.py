@@ -63,7 +63,7 @@ class NllMetrics(Metric):
         self.w_yaw = list(w_yaw)
         self.w_spd = list(w_spd)
         self.w_vel = list(w_vel)
-        
+
         self.pairwise_joint = pairwise_joint
 
         self.add_state("counter_traj", default=tensor(0.0), dist_reduce_fx="sum")
@@ -125,18 +125,32 @@ class NllMetrics(Metric):
         """
         n_agent_type = ref_type.shape[-1]
         n_decoder, n_scene, n_agent, n_pred = pred_conf.shape
-        
+
         # ! prepare avails
         avails = ref_role.any(-1)  # [n_scene, n_agent]
-        
+
         if self.pairwise_joint:
             gt_valid = gt_valid[kwargs["to_predict"]]
             gt_pos = gt_pos[kwargs["to_predict"]]
-            gt_valid = rearrange(gt_valid, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
-            gt_pos = rearrange(gt_pos, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
-            
-            ref_type = ref_type[kwargs["to_predict"]] # Since w_conf, w_pos etc. are based on the shape of ref_type
-            ref_type = rearrange(ref_type, "(n_scene n_target) ... -> n_scene n_target ...", n_scene=n_scene)
+            gt_valid = rearrange(
+                gt_valid,
+                "(n_scene n_target) ... -> n_scene n_target ...",
+                n_scene=n_scene,
+            )
+            gt_pos = rearrange(
+                gt_pos,
+                "(n_scene n_target) ... -> n_scene n_target ...",
+                n_scene=n_scene,
+            )
+
+            ref_type = ref_type[
+                kwargs["to_predict"]
+            ]  # Since w_conf, w_pos etc. are based on the shape of ref_type
+            ref_type = rearrange(
+                ref_type,
+                "(n_scene n_target) ... -> n_scene n_target ...",
+                n_scene=n_scene,
+            )
             avails = pred_valid
         else:
             assert (
@@ -288,41 +302,51 @@ class NllMetrics(Metric):
             # pred_pos.shape = [..., 80, 2]
             # pred_cov.shape = [..., 80, 2, 2] for cov1/2/3
             # same shape as always in matrix form -> diagonal elements are covs offdiagonal is rho (rotation)
-            # for Laplace distribution: configure as cov2 and reuse diagonal elements as scale factor b (https://en.wikipedia.org/wiki/Laplace_distribution)            
-            scale = torch.cat((scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1) # Since scale and pred_pos must have the same shape
+            # for Laplace distribution: configure as cov2 and reuse diagonal elements as scale factor b (https://en.wikipedia.org/wiki/Laplace_distribution)
+            scale = torch.cat(
+                (scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1
+            )  # Since scale and pred_pos must have the same shape
 
             with torch.no_grad():
                 scale.clamp_(min=1e-6)
-            
-            # Src: https://github.com/ZikangZhou/QCNet/blob/main/losses/laplace_nll_loss.py            
-            nll = torch.log(2 * scale) + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
-            
+
+            # Src: https://github.com/ZikangZhou/QCNet/blob/main/losses/laplace_nll_loss.py
+            nll = (
+                torch.log(2 * scale)
+                + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
+            )
+
             errors_pos = nll.sum(dim=-1)
         elif self.l_pos == "nll_exp_power_like":
             gmm_cov = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx].clone()
-            gmm_cov[..., 1, 0] = 0 # set rho to 0 as it is used as gate not rho
+            gmm_cov[..., 1, 0] = 0  # set rho to 0 as it is used as gate not rho
             gmm = MultivariateNormal(pred_pos, scale_tril=gmm_cov)
             nll_normal = -gmm.log_prob(gt_pos[None, :, :, None, :, :])
-            
+
             scale = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx]
             # for paper debug etc
             scale_x = scale[..., 0, 0]
-            scale_y = scale[..., 1, 1]           
-            scale = torch.cat((scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1) # Since scale and pred_pos must have the same shape
+            scale_y = scale[..., 1, 1]
+            scale = torch.cat(
+                (scale[..., 0:1, 0], scale[..., 1:2, 1]), dim=-1
+            )  # Since scale and pred_pos must have the same shape
             gate = pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx][..., 1, 0]
 
             with torch.no_grad():
                 scale.clamp_(min=1e-6)
                 gate.clamp_(min=0, max=1)
-            
+
             self.exp_power_gate = gate.mean()
             self.scale_x = scale_x.mean()
             self.scale_y = scale_y.mean()
-                     
-            nll_laplace = torch.log(2 * scale) + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
-            
+
+            nll_laplace = (
+                torch.log(2 * scale)
+                + torch.abs(gt_pos[None, :, :, None, :, :] - pred_pos) / scale
+            )
+
             errors_pos = gate * nll_normal + (1 - gate) * nll_laplace.sum(dim=-1)
-        
+
         self.error_pos += (
             (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
         )
