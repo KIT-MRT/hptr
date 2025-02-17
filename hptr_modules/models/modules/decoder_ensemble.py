@@ -108,9 +108,7 @@ class MLPHead(nn.Module):
             n_decoders=n_mlp_head, decoder_cfg=cfg_mlp_conf, use_vmap=use_vmap
         )
 
-    def forward(
-        self, valid: Tensor, emb: Tensor, agent_type: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, valid: Tensor, emb: Tensor, agent_type: Tensor, return_last_hidden_state: bool = False) -> Tuple[Tensor, Tensor]:
         """
         Args:
             valid: [n_scene, n_agent]
@@ -121,12 +119,12 @@ class MLPHead(nn.Module):
             conf: [n_scene, n_agent, n_pred]
             pred: [n_scene, n_agent, n_pred, n_step_future, pred_dim]
         """
-        pred = self.mlp_pred(
-            x=emb, valid_mask=valid.unsqueeze(-1)
-        )  # [1/3, n_scene, n_agent, n_pred, 400]
-        conf = self.mlp_conf(x=emb, valid_mask=valid.unsqueeze(-1)).squeeze(
-            -1
-        )  # [1/3, n_scene, n_agent, n_pred]
+        if return_last_hidden_state:
+            pred, last_hidden_state = self.mlp_pred(x=emb, valid_mask=valid.unsqueeze(-1), return_last_hidden_state=True)
+        else:
+            pred = self.mlp_pred(x=emb, valid_mask=valid.unsqueeze(-1))  # [1/3, n_scene, n_agent, n_pred, 400]
+        
+        conf = self.mlp_conf(x=emb, valid_mask=valid.unsqueeze(-1)).squeeze(-1)  # [1/3, n_scene, n_agent, n_pred]
 
         if self.use_agent_type:
             _type = agent_type.movedim(-1, 0).unsqueeze(-1)  # [3, n_scene, n_agent, 1]
@@ -137,9 +135,11 @@ class MLPHead(nn.Module):
             conf = conf.squeeze(0)
 
         n_scene, n_agent, n_pred = conf.shape
-        return conf, pred.view(
-            n_scene, n_agent, n_pred, self.n_step_future, self.pred_dim
-        )
+        
+        if return_last_hidden_state:
+            return conf, pred.view(n_scene, n_agent, n_pred, self.n_step_future, self.pred_dim), last_hidden_state
+            
+        return conf, pred.view(n_scene, n_agent, n_pred, self.n_step_future, self.pred_dim) 
 
 
 class MLPEnsemble(nn.Module):
@@ -171,5 +171,11 @@ class MLPEnsemble(nn.Module):
             for decoder in self._decoders:
                 x = decoder(**kwargs)
                 out.append(x)
+            
+            if kwargs.get("return_last_hidden_state"):
+                assert self.n_decoders == 1, "return last hidden state is only implemented for 1 decoder"
+                pred, last_hidden_state = out[0]
+                return pred, last_hidden_state 
+            
             out = torch.stack(out, dim=0)
         return out

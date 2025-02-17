@@ -65,19 +65,28 @@ class MLP(nn.Module):
         self.output_dim = fc_dims[-1]
         self.fc_layers = nn.Sequential(*layers)
 
-    def forward(
-        self, x: Tensor, valid_mask: Optional[Tensor] = None, fill_invalid: float = 0.0
-    ) -> Tensor:
+    def forward(self, x: Tensor, valid_mask: Optional[Tensor] = None, fill_invalid: float = 0.0, return_last_hidden_state: bool = False) -> Tensor:
         """
         Args:
             x: [..., input_dim]
             valid_mask: [...]
         Returns:
             x: [..., output_dim]
+            opt. last_hidden_state: [..., hidden_dim]
         """
+        # opt. improve later
+        if return_last_hidden_state:
+            last_hidden_state = self.fc_layers[:-1](x.flatten(0, -2))
+
         x = self.fc_layers(x.flatten(0, -2)).view(*x.shape[:-1], self.output_dim)
+
         if valid_mask is not None:
             x.masked_fill_(~valid_mask.unsqueeze(-1), fill_invalid)
+
         if self.end_layer_activation is not None:
             self.end_layer_activation(x)
-        return x
+        
+        if return_last_hidden_state:
+            return x, last_hidden_state
+        
+        return x 
