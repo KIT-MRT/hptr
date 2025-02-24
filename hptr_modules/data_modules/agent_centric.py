@@ -1,7 +1,9 @@
 # Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
+import time
+import torch
+
 from typing import Dict
 from omegaconf import DictConfig
-import torch
 from torch import nn, Tensor
 from hptr_modules.utils.transform_utils import (
     torch_rad2rot,
@@ -21,6 +23,7 @@ class AgentCentricPreProcessing(nn.Module):
         n_map: int,
         n_tl: int,
         mask_invalid: bool,
+        time_step_end: int = None,
     ) -> None:
         super().__init__()
         self.step_current = time_step_current
@@ -31,6 +34,7 @@ class AgentCentricPreProcessing(nn.Module):
         self.n_tl = n_tl
         self.mask_invalid = mask_invalid
         self.model_kwargs = {"gt_in_local": True, "agent_centric": True}
+        self.time_step_end = time_step_end
 
     def forward(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """
@@ -108,6 +112,19 @@ class AgentCentricPreProcessing(nn.Module):
                 "ac/tl_pos": [n_scene, n_target, n_step_hist, n_tl, 2], x,y
                 "ac/tl_dir": [n_scene, n_target, n_step_hist, n_tl, 2], x,y
         """
+        if self.time_step_end:
+            for key in batch.keys():
+                if key.startswith("agent") and key.split("/")[-1] in (
+                    "pos",
+                    "vel",
+                    "acc",
+                    "spd",
+                    "yaw_bbox",
+                    "yaw_rate",
+                    "valid",
+                ):
+                    batch[key] = batch[key][:, : (self.time_step_end + 1)]
+
         prefix = "" if self.training else "history/"
         n_scene = batch[prefix + "agent/valid"].shape[0]
 
