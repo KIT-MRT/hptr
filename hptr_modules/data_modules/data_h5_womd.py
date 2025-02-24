@@ -73,9 +73,21 @@ class DataH5womd(LightningDataModule):
             "interactive" in filename_val or "interactive" in filename_test
         )
 
-        self.path_train_h5 = f"{data_dir}/{filename_train}.h5"
-        self.path_val_h5 = f"{data_dir}/{filename_val}.h5"
-        self.path_test_h5 = f"{data_dir}/{filename_test}.h5"
+        if "/" in filename_train:
+            self.path_train_h5 = filename_train
+        else:
+            self.path_train_h5 = f"{data_dir}/{filename_train}.h5"
+
+        if "/" in filename_val:
+            self.path_val_h5 = filename_val
+        else:
+            self.path_val_h5 = f"{data_dir}/{filename_val}.h5"
+
+        if "/" in filename_test:
+            self.path_test_h5 = filename_test
+        else:
+            self.path_test_h5 = f"{data_dir}/{filename_test}.h5"
+
         self.batch_size = batch_size
         self.num_workers = num_workers
 
