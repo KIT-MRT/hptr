@@ -6,6 +6,7 @@ from torch import nn, Tensor
 from ..utils.transform_utils import torch_pos2global, torch_rad2global
 
 import time
+from einops import repeat
 
 
 class WaymoPostProcessing(nn.Module):
@@ -21,6 +22,7 @@ class WaymoPostProcessing(nn.Module):
         use_ade: bool,
         use_mpa_multiagent: bool = False,
         normalize_across_agents: bool = False,
+        mtr_aggregate_conf: bool = False,
         **kwargs,
     ) -> None:
         """
@@ -39,6 +41,7 @@ class WaymoPostProcessing(nn.Module):
         self.use_ade = use_ade
         self.use_mpa_multiagent = use_mpa_multiagent
         self.normalize_across_agents = normalize_across_agents
+        self.mtr_aggregate_conf = mtr_aggregate_conf
 
         print(f"{use_mpa_multiagent = }")
         print(f"{normalize_across_agents = }")
@@ -85,6 +88,7 @@ class WaymoPostProcessing(nn.Module):
                     self.mtr_nms_thresh,
                     self.use_ade,
                     pred_dict["ref_type"],
+                    aggregate_conf=self.mtr_aggregate_conf,
                 )
             else:
                 trajs, scores = self.traj_topk(trajs, scores, self.k_pred)
@@ -340,6 +344,7 @@ class WaymoPostProcessing(nn.Module):
         type_thresh: float,
         use_ade: bool,
         agent_type: Tensor,
+        aggregate_conf: bool = True,
     ) -> Tuple[Tensor, Tensor]:
         """
         Args:
@@ -353,6 +358,11 @@ class WaymoPostProcessing(nn.Module):
             trajs_k: [n_scene, n_agent, k_pred, n_step, 2], in local coordinate
             scores_k: [n_scene, n_agent, k_pred], normalized prob
         """
+        if aggregate_conf:
+            n_agent = scores.shape[1]
+            scores = scores.mean(dim=1, keepdim=True)
+            scores = repeat(scores, "n_scene 1 n_pred -> n_scene n_agent n_pred", n_agent=n_agent)
+        
         # ! type dependent thresh
         thresh = 0
         for i in range(len(type_thresh)):
