@@ -387,16 +387,52 @@ class WaymoPostProcessing(nn.Module):
         agent_idx = torch.arange(scores.shape[1]).unsqueeze(0)  # [1, n_agent]
         mode_idx = []
         scores_clone = scores.clone()
-        for _ in range(k_pred):
-            # [n_scene, n_agent]
-            _idx = scores_clone.max(-1)[1]
-            # [n_scene, n_agent, n_pred], True entry has w=0.01, False entry has w=1.0
-            w_mask = ~(within_dist[scene_idx, agent_idx, _idx]) * 0.99 + 0.01
-            # [n_scene, n_agent, n_pred], suppress all preds close to the selected one, by multiplying the prob by 0.1
-            scores_clone *= w_mask
-            scores_clone[scene_idx, agent_idx, _idx] = -1
-            # append to mode_idx
-            mode_idx.append(_idx)
+        
+        # TODO: dbl check 
+        if aggregate_conf:
+            # For each prediction, compute the mean score across all agents
+            # [n_scene, n_pred]
+            agg_scores = scores.mean(dim=1)
+            
+            for _ in range(k_pred):
+                # Find the prediction with highest aggregated score
+                # [n_scene]
+                best_pred_idx = agg_scores.max(-1)[1]
+                
+                # For each agent, select the best prediction
+                # [n_scene, n_agent]
+                _idx = best_pred_idx.unsqueeze(1).expand(-1, scores.shape[1])
+                
+                # Suppress scores for trajectories close to the selected ones
+                # Get mask of trajectories close to the selected one for each agent
+                # [n_scene, n_agent, n_pred]
+                close_mask = within_dist[scene_idx, agent_idx, _idx]
+            
+                # Apply suppression to aggregated scores (multiply by 0.01)
+                # [n_scene, n_pred]
+                # Vectorized operation: any trajectory close to the selected one across any agent
+                suppress_mask = close_mask.any(dim=1)
+                
+                # Suppress aggregated scores (multiply by 0.01 for close trajectories)
+                agg_scores = agg_scores * (~suppress_mask * 0.99 + 0.01)
+                
+                # Set selected prediction score to -1 to avoid reselection
+                agg_scores[torch.arange(agg_scores.shape[0]), best_pred_idx] = -1
+                
+                # Add to mode index
+                mode_idx.append(_idx)
+        else:
+            # Original implementation - agent-wise NMS
+            for _ in range(k_pred):
+                # [n_scene, n_agent]
+                _idx = scores_clone.max(-1)[1]
+                # [n_scene, n_agent, n_pred], True entry has w=0.01, False entry has w=1.0
+                w_mask = ~(within_dist[scene_idx, agent_idx, _idx]) * 0.99 + 0.01
+                # [n_scene, n_agent, n_pred], suppress all preds close to the selected one, by multiplying the prob by 0.1
+                scores_clone *= w_mask
+                scores_clone[scene_idx, agent_idx, _idx] = -1
+                # append to mode_idx
+                mode_idx.append(_idx)
 
         mode_idx = torch.stack(mode_idx, dim=-1)  # [n_scene, n_agent, k_pred]
         scene_idx = scene_idx.unsqueeze(-1)  # [n_scene, 1, 1]
