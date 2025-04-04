@@ -23,6 +23,8 @@ class WaymoPostProcessing(nn.Module):
         use_mpa_multiagent: bool = False,
         normalize_across_agents: bool = False,
         mtr_aggregate_conf: bool = False,
+        topk_aggregate_conf: bool = False,
+        topk_after_mpa_nms: bool = False,
         **kwargs,
     ) -> None:
         """
@@ -42,9 +44,13 @@ class WaymoPostProcessing(nn.Module):
         self.use_mpa_multiagent = use_mpa_multiagent
         self.normalize_across_agents = normalize_across_agents
         self.mtr_aggregate_conf = mtr_aggregate_conf
+        self.topk_aggregat_conf = topk_aggregate_conf
+        self.topk_after_mpa_nms = topk_after_mpa_nms
 
         print(f"{use_mpa_multiagent = }")
         print(f"{normalize_across_agents = }")
+        print(f"{topk_after_mpa_nms = }")
+        print(f"{topk_aggregate_conf = }")
 
     def forward(self, pred_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """
@@ -75,7 +81,8 @@ class WaymoPostProcessing(nn.Module):
         scores = scores / scores.sum(-1, keepdim=True)  # normalized to prob
         n_scene, n_agent, n_pred, n_step, _ = trajs.shape
         # assert n_pred == self.k_pred
-        if n_pred > self.k_pred:
+        
+        if n_pred > self.k_pred and not self.topk_after_mpa_nms:
             # if len(self.aggr_thresh) > 0:
             #     trajs, scores = self.traj_aggr(
             #         trajs, scores, self.k_pred, self.aggr_thresh, self.n_iter_em, self.use_ade
@@ -103,6 +110,14 @@ class WaymoPostProcessing(nn.Module):
                 self.use_ade,
                 pred_dict["ref_type"],
             )
+            
+            if self.topk_after_mpa_nms:
+                trajs, scores = self.traj_topk(
+                    trajs=trajs,
+                    scores=scores,
+                    k_pred=self.k_pred,
+                    aggregate_conf=self.topk_aggregat_conf,
+                )
 
         if self.use_mpa_multiagent and len(self.mpa_nms_thresh) > 0:
             scores = self.mpa_nms_multiagent(
@@ -114,6 +129,14 @@ class WaymoPostProcessing(nn.Module):
                 pred_dict["ref_type"],
                 normalize_across_agents=self.normalize_across_agents,
             )
+            
+            if self.topk_after_mpa_nms:
+                trajs, scores = self.traj_topk(
+                    trajs=trajs,
+                    scores=scores,
+                    k_pred=self.k_pred,
+                    aggregate_conf=self.topk_aggregat_conf,
+                )
 
         if self.score_temperature > 0:
             scores = torch.softmax(torch.log(scores) / self.score_temperature, dim=-1)
@@ -443,7 +466,7 @@ class WaymoPostProcessing(nn.Module):
         return trajs_k, scores_k
 
     @staticmethod
-    def traj_topk(trajs: Tensor, scores: Tensor, k_pred: int) -> Tuple[Tensor, Tensor]:
+    def traj_topk(trajs: Tensor, scores: Tensor, k_pred: int, aggregate_conf: bool = False) -> Tuple[Tensor, Tensor]:
         """
         Args:
             trajs: [n_scene, n_agent, n_pred, n_step, 2], in local coordinate
@@ -456,9 +479,23 @@ class WaymoPostProcessing(nn.Module):
         """
         scene_idx = torch.arange(scores.shape[0])[:, None, None]  # [n_scene, 1, 1]
         agent_idx = torch.arange(scores.shape[1])[None, :, None]  # [1, n_agent, 1]
-        mode_idx = scores.topk(k_pred, dim=-1, sorted=False)[
-            1
-        ]  # [n_scene, n_agent, k_pred]
+        
+        # We don't aggregate scores in output but just to suppress less likely scenes
+        # same as in mpa multiagent nms without norm across agents
+        # this still prevents trajs of less likely joint modes to supress trajs in more likely ones
+        # but "keeps the flexibility" of non normed confidence scores (empirically better performance, tested in mpa nms, opt re-test here as well)
+        if aggregate_conf:
+            n_agent = scores.shape[1]
+            scores_agg = scores.mean(dim=1, keepdim=True)
+            scores_agg = repeat(scores_agg, "n_scene 1 n_pred -> n_scene n_agent n_pred", n_agent=n_agent)
+            mode_idx = scores_agg.topk(k_pred, dim=-1, sorted=False)[
+                1
+            ]  # [n_scene, n_agent, k_pred]
+        else:
+            mode_idx = scores.topk(k_pred, dim=-1, sorted=False)[
+                1
+            ]  # [n_scene, n_agent, k_pred]
+        
         trajs_k = trajs[scene_idx, agent_idx, mode_idx]
         scores_k = scores[scene_idx, agent_idx, mode_idx]
 
