@@ -12,6 +12,7 @@ from waymo_open_dataset.metrics.python.config_util_py import (
 )
 from waymo_open_dataset.metrics.ops import py_metrics_ops
 
+import time
 
 class WaymoMetrics(Metric):
     """
@@ -68,6 +69,9 @@ class WaymoMetrics(Metric):
         self.add_state("object_type_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("brier_minADE_gpu", default=[], dist_reduce_fx="cat")
         self.add_state("brier_minFDE_gpu", default=[], dist_reduce_fx="cat")
+        self.add_state("brier_minFDE_gpu_veh", default=[], dist_reduce_fx="cat")
+        self.add_state("brier_minFDE_gpu_ped", default=[], dist_reduce_fx="cat")
+        self.add_state("brier_minFDE_gpu_cyc", default=[], dist_reduce_fx="cat")
 
         self.ops_inputs_cpu = {
             "prediction_trajectory": [],
@@ -78,6 +82,9 @@ class WaymoMetrics(Metric):
             "object_type": [],
             "brier_minADE": [],
             "brier_minFDE": [],
+            "brier_minFDE_veh": [],
+            "brier_minFDE_ped": [],
+            "brier_minFDE_cyc": [],
         }
 
     def update(
@@ -93,6 +100,7 @@ class WaymoMetrics(Metric):
         """
         # [n_batch, n_agent]
         mask_pred = batch["agent/role"][..., 2]
+        
         # mask_other = (~mask_pred) & (batch["agent/valid"][:, self.step_current, :].cpu())
         mask_other = (~mask_pred) & batch["agent/valid"][
             :, : self.step_current + 1, :
@@ -106,16 +114,29 @@ class WaymoMetrics(Metric):
             dim=-1,
         )
         dist = dist * (batch["agent/valid"][:, self.step_current + 1 :].unsqueeze(-1))
+        
+        # Always computed as marginal metrics
         # brier_minADE
         min_ade, min_idx = dist.mean(1).min(-1)
         brier_minADE = min_ade + (1 - pred_score[batch_idx, agent_idx, min_idx]) ** 2
         self.brier_minADE_gpu.append(brier_minADE[mask_pred])
+        
         # brier_minFDE
         min_fde, min_idx = dist[:, -1].min(-1)
         brier_minFDE = min_fde + (1 - pred_score[batch_idx, agent_idx, min_idx]) ** 2
+        
         # self.brier_minFDE_gpu.append(brier_minFDE[mask_pred])
         self.brier_minFDE_gpu.append(
             brier_minFDE[mask_pred & batch["agent/valid"][:, -1]]
+        )
+        self.brier_minFDE_gpu_veh.append(
+            brier_minFDE[mask_pred & batch["agent/valid"][:, -1] & batch["agent/type"][..., 0]]
+        )
+        self.brier_minFDE_gpu_ped.append(
+            brier_minFDE[mask_pred & batch["agent/valid"][:, -1] & batch["agent/type"][..., 1]]
+        )
+        self.brier_minFDE_gpu_cyc.append(
+            brier_minFDE[mask_pred & batch["agent/valid"][:, -1] & batch["agent/type"][..., 2]]
         )
 
         # gt_traj: [n_batch, n_agent, step_gt, 7]
@@ -232,6 +253,9 @@ class WaymoMetrics(Metric):
             "object_type": self.object_type_gpu,
             "brier_minADE": self.brier_minADE_gpu,
             "brier_minFDE": self.brier_minFDE_gpu,
+            "brier_minFDE_veh": self.brier_minFDE_gpu_veh,
+            "brier_minFDE_ped": self.brier_minFDE_gpu_ped,
+            "brier_minFDE_cyc": self.brier_minFDE_gpu_cyc,
         }
         return out_dict
 
@@ -307,6 +331,11 @@ class WaymoMetrics(Metric):
             out_dict[f"{self.prefix}/cyc/{m_type}"] = sum_CYCLIST / counter_CYCLIST
         out_dict[f"{self.prefix}/brier_minADE"] = ops_inputs["brier_minADE"].mean()
         out_dict[f"{self.prefix}/brier_minFDE"] = ops_inputs["brier_minFDE"].mean()
+        
+        out_dict[f"{self.prefix}/veh/brier_minFDE"] = ops_inputs["brier_minFDE_veh"].mean()
+        out_dict[f"{self.prefix}/ped/brier_minFDE"] = ops_inputs["brier_minFDE_ped"].mean()
+        out_dict[f"{self.prefix}/cyc/brier_minFDE"] = ops_inputs["brier_minFDE_cyc"].mean()
+        
         return out_dict
 
     @staticmethod
