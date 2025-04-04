@@ -1,5 +1,7 @@
 # Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
+import time
 import torch
+import numpy as np
 
 from omegaconf import ListConfig
 from torch import Tensor, tensor
@@ -48,6 +50,7 @@ class NllMetrics(Metric):
         w_spd: ListConfig,  # huber
         w_vel: ListConfig,  # huber
         pairwise_joint: bool = False,
+        w_interactive: bool = False, # Sets weights pairwise also for agents interacting with agents of type(s) with the highest weight
     ) -> None:
         super().__init__(dist_sync_on_step=False)
         self.prefix = prefix
@@ -65,6 +68,7 @@ class NllMetrics(Metric):
         self.w_vel = list(w_vel)
 
         self.pairwise_joint = pairwise_joint
+        self.w_interactive = w_interactive
 
         self.add_state("counter_traj", default=tensor(0.0), dist_reduce_fx="sum")
         self.add_state("counter_conf", default=tensor(0.0), dist_reduce_fx="sum")
@@ -257,6 +261,18 @@ class NllMetrics(Metric):
             w_spd += ref_type[:, :, i] * self.w_spd[i]
             w_vel += ref_type[:, :, i] * self.w_vel[i]
 
+        if self.w_interactive:            
+            idxs_max_w_pos = np.argwhere(self.w_pos == np.amax(self.w_pos))
+            idxs_max_w_conf = np.argwhere(self.w_conf == np.amax(self.w_conf))
+            
+            for idx in idxs_max_w_conf:
+                # Set all weights in scene with agents of this type to the weight for this type
+                # i.e. set weight for other agents that interact with agents of this type as well
+                w_conf[ref_type[..., idx[0]].any(dim=-1)] = self.w_conf[idx[0]]
+            
+            for idx in idxs_max_w_pos:
+                w_pos[ref_type[..., idx[0]].any(dim=-1)] = self.w_pos[idx[0]]
+        
         # ! error_conf
         # pred_conf: [n_decoder, n_scene, n_agent, n_pred], not normalized!
         pred_conf = pred_conf[decoder_idx, scene_idx, agent_idx, mode_idx]
