@@ -51,6 +51,7 @@ class NllMetrics(Metric):
         w_vel: ListConfig,  # huber
         pairwise_joint: bool = False,
         w_interactive: bool = False, # Sets weights pairwise also for agents interacting with agents of type(s) with the highest weight
+        w_time_steps: Tensor = torch.ones(80, dtype=float),
     ) -> None:
         super().__init__(dist_sync_on_step=False)
         self.prefix = prefix
@@ -69,6 +70,14 @@ class NllMetrics(Metric):
 
         self.pairwise_joint = pairwise_joint
         self.w_interactive = w_interactive
+        
+        self.w_time_steps = torch.tensor(w_time_steps, dtype=float)
+        
+        # Norm to keep the sum equal to the default setting with 80 ones
+        # this preserves the relation of the total pos loss to other losses
+        if self.w_time_steps.sum() != 80.0:
+            self.w_time_steps /= self.w_time_steps.sum()
+            self.w_time_steps *= 80.0
 
         self.add_state("counter_traj", default=tensor(0.0), dist_reduce_fx="sum")
         self.add_state("counter_conf", default=tensor(0.0), dist_reduce_fx="sum")
@@ -363,8 +372,10 @@ class NllMetrics(Metric):
 
             errors_pos = gate * nll_normal + (1 - gate) * nll_laplace.sum(dim=-1)
 
+        w_pos = w_pos[None, :, :, None, None] * self.w_time_steps.to(device=w_pos.device)
+        
         self.error_pos += (
-            (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
+            (errors_pos * w_pos).masked_fill(~avails, 0.0).sum()
         )
 
         # ! error_spd
