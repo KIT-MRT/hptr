@@ -855,8 +855,9 @@ def repack_episode_agents_no_sim(
     episode_reduced[prefix + "agent_no_sim/object_id"] = (
         np.zeros([n_agent_no_sim], dtype=np.int64) - 1
     )
+    n_agent_types = episode[prefix + "agent/type"].shape[-1]
     episode_reduced[prefix + "agent_no_sim/type"] = np.zeros(
-        [n_agent_no_sim, 3], dtype=bool
+        [n_agent_no_sim, n_agent_types], dtype=bool
     )
     episode_reduced[prefix + "agent_no_sim/size"] = np.zeros(
         [n_agent_no_sim, 3], dtype=np.float32
@@ -951,7 +952,10 @@ def repack_episode_agents(
     episode_reduced[prefix + "agent/object_id"] = (
         np.zeros([n_agent], dtype=np.int64) - 1
     )
-    episode_reduced[prefix + "agent/type"] = np.zeros([n_agent, 3], dtype=bool)
+    n_agent_types = episode[prefix + "agent/type"].shape[-1]
+    episode_reduced[prefix + "agent/type"] = np.zeros(
+        [n_agent, n_agent_types], dtype=bool
+    )
     # one hot [sdc=0, interest=1, predict=2]
     episode_reduced[prefix + "agent/role"] = np.zeros(
         [n_agent, episode[prefix + "agent/role"].shape[-1]], dtype=bool
@@ -1168,6 +1172,10 @@ def find_dest(
             idx_dest = pl_idx_road_edge[
                 np.linalg.norm((pos_road_edge - extended_goal_pos), axis=1).argmin()
             ]
+    elif agent_type[3]:
+        idx_dest = pl_idx_veh_lane[
+            np.linalg.norm((pos_veh_lane - goal_pos), axis=1).argmin()
+        ]
     return idx_dest
 
 

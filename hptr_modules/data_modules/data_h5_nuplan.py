@@ -16,6 +16,8 @@ from hptr_modules.utils.nuplan.constants import (
     N_PL,
 )
 
+N_AGENT_TYPE = 4
+
 
 class DatasetBase(Dataset[Dict[str, np.ndarray]]):
     def __init__(self, filepath: str, tensor_size: Dict[str, Tuple]) -> None:
@@ -119,7 +121,7 @@ class DataH5nuplan(LightningDataModule):
             # agent attributes
             "agent/type": (
                 n_agent,
-                3,
+                N_AGENT_TYPE,
             ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
             "agent/cmd": (n_agent, 8),  # bool one_hot
             "agent/role": (n_agent, 3),  # bool [sdc=0, interest=1, predict=2]
@@ -179,7 +181,7 @@ class DataH5nuplan(LightningDataModule):
             ),  # rad/s, yaw_rate[t] = (yaw[t]-yaw[t-1])/dt
             "history/agent/type": (
                 n_agent,
-                3,
+                N_AGENT_TYPE,
             ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
             "history/agent/role": (n_agent, 3),  # bool [sdc=0, interest=1, predict=2]
             "history/agent/size": (n_agent, 3),  # float32: [length, width, height]
@@ -189,7 +191,7 @@ class DataH5nuplan(LightningDataModule):
             "history/agent_no_sim/vel": (n_step_history, n_agent_no_sim, 2),
             "history/agent_no_sim/spd": (n_step_history, n_agent_no_sim, 1),
             "history/agent_no_sim/yaw_bbox": (n_step_history, n_agent_no_sim, 1),
-            "history/agent_no_sim/type": (n_agent_no_sim, 3),
+            "history/agent_no_sim/type": (n_agent_no_sim, N_AGENT_TYPE),
             "history/agent_no_sim/size": (n_agent_no_sim, 3),
             # map
             "map/valid": (n_pl, n_pl_node),  # bool
@@ -236,7 +238,7 @@ class DataH5nuplan(LightningDataModule):
             ),  # float32, yaw of the bbox heading
             "agent_no_sim/type": (
                 n_agent_no_sim,
-                3,
+                N_AGENT_TYPE,
             ),  # bool one_hot [Vehicle=0, Pedestrian=1, Cyclist=2]
             "agent_no_sim/size": (
                 n_agent_no_sim,

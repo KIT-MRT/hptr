@@ -69,9 +69,7 @@ def collate_agent_features(
     # Tuple instead of Point2d for compatibility with nuplan pack utils
     scenario_center_tuple = [scenario_center.x, scenario_center.y]
 
-    common_states = [
-        [ego] + other for ego, other in zip(ego_states, observation_states)
-    ]
+    common_states = [ego + other for ego, other in zip(ego_states, observation_states)]
 
     agent_id = []
     agent_type = []
@@ -123,9 +121,10 @@ def collate_agent_features(
 
     # Mining for interesting agents:
     # Use just agents valid at the current step (because of model architecture)
+    # and only agents of type vehicle, pedestrian, bicycle
     tracks_for_mining = {}
     for track_token, track in tracks.items():
-        if track["state"]["valid"][STEP_CURRENT] == 1:
+        if track["state"]["valid"][STEP_CURRENT] == 1 and track["type"] < 3:
             tracks_for_mining[track_token] = copy.deepcopy(track)
     track_ids_predict, track_ids_interact = mining_for_interesting_agents(
         tracks_for_mining, n_agent_pred_challenge, n_agent_interact_challange
@@ -394,7 +393,8 @@ def convert_nuplan_scenario(
     pack_history,
     dest_no_pred,
     radius,
-    split: str = "training",
+    only_agents,
+    split,
 ):
     scenario_log_interval = scenario.database_interval
     assert abs(scenario_log_interval - 0.1) < 1e-3, (
@@ -407,11 +407,21 @@ def convert_nuplan_scenario(
     )
 
     map_api = initialization.map_api
-    past_observations = [
+
+    # past_objects = [[objects_t0], [objects_t1], ...]
+    past_agents = [
         obs.tracked_objects.get_agents() for obs in current_input.history.observations
     ]
+    past_static_objects = [
+        obs.tracked_objects.get_static_objects()
+        for obs in current_input.history.observations
+    ]
+    # past_observations includes all types of agents and objects (not ego)
+    past_observations = [
+        agents + objects for agents, objects in zip(past_agents, past_static_objects)
+    ]
     past_ego_states = [
-        ego_state.agent for ego_state in current_input.history.ego_states
+        [ego_state.agent] for ego_state in current_input.history.ego_states
     ]
     scenario_center = current_input.history.ego_states[-1].center.point
 
@@ -421,7 +431,7 @@ def convert_nuplan_scenario(
         past_ego_states,
         past_observations,
         N_STEP,
-        only_agents=True,
+        only_agents,
     )
     # traffic light
     tl_lane_state, tl_lane_id, tl_stop_point = collate_tl_features(
@@ -477,6 +487,7 @@ def convert_nuplan_scenario(
         pack_history=pack_history,
         n_agent_max=N_AGENT_MAX,
         step_current=STEP_CURRENT,
+        n_agent_type=N_AGENT_TYPE if not only_agents else 3,
     )
     n_route_pl = pack_utils.pack_episode_route(
         episode=episode,
@@ -614,6 +625,7 @@ def wrapper_convert_nuplan_scenario(
     pack_history,
     dest_no_pred,
     radius,
+    only_agents,
     split,
 ):
     scenario, iteration, id = scenario_tuple
@@ -627,6 +639,7 @@ def wrapper_convert_nuplan_scenario(
             pack_history,
             dest_no_pred,
             radius,
+            only_agents,
             split,
         )
     )
@@ -677,6 +690,7 @@ def main():
     parser.add_argument("--test", action="store_true", help="for test use only. convert one log")
     parser.add_argument("--num-workers", default=32, type=int)
     parser.add_argument("--batch-size", default=1024, type=int)
+    parser.add_argument("--only-agents", action="store_true")
     args = parser.parse_args()
     # fmt: on
 
@@ -756,6 +770,7 @@ def main():
                     pack_history=pack_history,
                     dest_no_pred=args.dest_no_pred,
                     radius=args.radius,
+                    only_agents=args.only_agents,
                     split=args.dataset,
                 ),
                 batch,
