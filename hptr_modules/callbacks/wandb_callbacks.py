@@ -41,7 +41,16 @@ class ModelCheckpointWB(ModelCheckpoint):
     @rank_zero_only
     def _scan_and_log_checkpoints(self, wb_logger: WandbLogger) -> None:
         if self.save_only_best:
-            self._log_best_checkpoint(wb_logger)
+            self._log_all_checkpoints(wb_logger)
+            if not wb_logger._offline:
+                # Delete all artifacts without a tag (latest or best)
+                api = wandb.Api()
+                runs = api.run(
+                    f"{wb_logger.experiment.entity}/{wb_logger.experiment.project}/{wb_logger.experiment.id}"
+                )
+                for artifact in runs.logged_artifacts():
+                    if len(artifact.aliases) == 0:
+                        artifact.delete()
         else:
             self._log_all_checkpoints(wb_logger)
 
@@ -90,56 +99,6 @@ class ModelCheckpointWB(ModelCheckpoint):
             wb_logger.experiment.log_artifact(artifact, aliases=aliases)
             # remember logged models - timestamp needed in case filename didn't change (lastkckpt or custom name)
             self._logged_model_time[p] = t
-
-    def _log_best_checkpoint(self, wb_logger: WandbLogger) -> None:
-        # Only consider the best model checkpoint for logging
-        if Path(self.best_model_path).is_file():
-            best_model_mtime = Path(self.best_model_path).stat().st_mtime
-            # Check if the best model checkpoint is new or has been updated
-            if (
-                self.best_model_path not in self._logged_model_time
-                or self._logged_model_time[self.best_model_path] < best_model_mtime
-            ):
-                # Attempt to delete the previous best artifact if it exists
-                try:
-                    api = wandb.Api()
-                    runs = api.run(
-                        f"{wb_logger.experiment.entity}/{wb_logger.experiment.project}/{wb_logger.experiment.id}"
-                    )
-                    for artifact in runs.logged_artifacts():
-                        if "best" in artifact.aliases:
-                            artifact.delete(delete_aliases=True)
-                            print("Deleted previous best artifact.")
-                            break
-                    else:
-                        print("No previous best artifact found to delete.")
-                except Exception as e:
-                    print(f"Could not delete previous best artifact: {e}")
-                # Log the best model checkpoint
-                metadata = {
-                    "score": self.best_model_score.item(),
-                    "original_filename": Path(self.best_model_path).name,
-                    "ModelCheckpoint": {
-                        k: getattr(self, k)
-                        for k in [
-                            "monitor",
-                            "mode",
-                            "save_last",
-                            "save_top_k",
-                            "save_weights_only",
-                            "_every_n_train_steps",
-                            "_every_n_val_epochs",
-                        ]
-                        if hasattr(self, k)
-                    },
-                }
-                artifact = wandb.Artifact(
-                    name=wb_logger.experiment.id, type="model", metadata=metadata
-                )
-                artifact.add_file(self.best_model_path, name="model.ckpt")
-                wb_logger.experiment.log_artifact(artifact, aliases=["best"])
-                # Update the log timestamp for this model checkpoint
-                self._logged_model_time[self.best_model_path] = best_model_mtime
 
 
 class WatchModel(Callback):
