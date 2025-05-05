@@ -69,10 +69,11 @@ def get_nuplan_scenarios(
         # "scenario_filter.scenario_tokens=[]",
         # "scenario_filter.map_names=[]",
         # "scenario_filter.num_scenarios_per_type=1",
-        # "scenario_filter.limit_total_scenarios=1000",
+        "scenario_filter.limit_total_scenarios=0.05",  # standard: one data sample per time step (20Hz) -> 0.05 = 1Hz
         # "scenario_filter.expand_scenarios=true",
         # "scenario_filter.limit_scenarios_per_type=10",  # use 10 scenarios per scenario type
-        "scenario_filter.timestamp_threshold_s=20",  # minial scenario duration (s)
+        # "scenario_filter.timestamp_threshold_s=1",  # Threshold for the interval of time between scenario initial lidar timestamps in seconds
+        "+scenario_filter.ego_route_radius=20",
     ]
 
     base_config_path = os.path.join(nuplan_package_path, "planning", "script")
@@ -89,7 +90,7 @@ def get_nuplan_scenarios(
     # Compose the configuration
     overrides = [
         f"group={save_dir}",
-        "worker=ray_distributed",  # sequential
+        "worker=sequential",  #  ray_distributed
         f"ego_controller={ego_controller}",
         f"observation={observation}",
         f"hydra.searchpath=[{simulation_hydra_paths.common_dir}, {simulation_hydra_paths.experiment_dir}]",
@@ -360,22 +361,6 @@ def get_route_lane_polylines_from_roadblock_ids(
         route_lane_polylines.append(baseline_path_polyline)
 
     return route_lane_polylines, map_objects_id
-
-
-def get_scenario_start_iter_tuple(scenario, n_step):
-    """
-    Sample subscenarios from the scenario based on the desired new length (n_step).
-    Start at the beginning (t=0) and go to the end in 1 sec steps until
-    the desired length reaches the end of the scenario.
-    """
-    scenario_id_start_idx_tuples = []
-    scenario_len_sec = int(scenario.duration_s.time_s)
-    scenario_time_step = scenario.database_interval
-    assert scenario_time_step == 0.1, "Only support 0.1s time step"
-    last_iteration = int((scenario_len_sec - 1) / scenario_time_step) - (n_step - 1)
-    for iteration in range(0, last_iteration, 10):
-        scenario_id_start_idx_tuples.append((scenario, iteration))
-    return scenario_id_start_idx_tuples
 
 
 def fill_track_with_state(

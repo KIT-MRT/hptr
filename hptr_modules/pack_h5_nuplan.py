@@ -15,7 +15,6 @@ from hptr_modules.utils.nuplan.pack_h5_nuplan_utils import (
     extract_centerline,
     mock_2d_to_3d_points,
     get_route_lane_polylines_from_roadblock_ids,
-    get_scenario_start_iter_tuple,
     fill_track_with_state,
     calc_velocity_from_positions,
     mining_for_interesting_agents,
@@ -386,7 +385,6 @@ def create_planner_input_from_scenario(
 
 def convert_nuplan_scenario(
     scenario: NuPlanScenario,
-    iteration,
     rand_pos,
     rand_yaw,
     pack_all,
@@ -402,9 +400,7 @@ def convert_nuplan_scenario(
         "By setting NuPlan subsample ratio can address this"
     )
 
-    initialization, current_input = create_planner_input_from_scenario(
-        scenario, iteration
-    )
+    initialization, current_input = create_planner_input_from_scenario(scenario, 0)
 
     map_api = initialization.map_api
 
@@ -597,7 +593,7 @@ def convert_nuplan_scenario(
             f"scenario {scenario.log_name} has no map! map boundary is: {episode_reduced['map/boundary']}"
         )
 
-    episode_name = scenario.token + "_" + str(iteration)
+    episode_name = scenario.token
     episode_metadata = {
         "scenario_id": episode_name,
         "scenario_center": scenario_center,
@@ -618,7 +614,7 @@ def convert_nuplan_scenario(
 
 
 def wrapper_convert_nuplan_scenario(
-    scenario_tuple,
+    scenarios,
     rand_pos,
     rand_yaw,
     pack_all,
@@ -627,12 +623,11 @@ def wrapper_convert_nuplan_scenario(
     radius,
     only_agents,
     split,
+    queue,
 ):
-    scenario, iteration, id = scenario_tuple
     episode, metadata, n_pl, n_tl, n_agent, n_agent_sim, n_agent_no_sim, n_route_pl = (
         convert_nuplan_scenario(
-            scenario,
-            iteration,
+            scenarios,
             rand_pos,
             rand_yaw,
             pack_all,
@@ -643,8 +638,7 @@ def wrapper_convert_nuplan_scenario(
             split,
         )
     )
-    metadata["hf_group_id"] = id
-    SCENARIO_QUEUE.put((episode, metadata))
+    queue.put((episode, metadata))
     return (
         episode,
         metadata,
@@ -660,10 +654,10 @@ def wrapper_convert_nuplan_scenario(
 def write_to_h5_file(h5_file_path, queue, total_items):
     with h5py.File(h5_file_path, "w") as h5_file:
         h5_file.attrs["data_len"] = total_items
-        for _ in range(total_items):
+        for i in range(total_items):
             data, metadata = queue.get()
             # Create a group for each item
-            group = h5_file.create_group(str(metadata["hf_group_id"]))
+            group = h5_file.create_group(str(i))
             # Store the transformed data in a dataset within the group
             for k, v in data.items():
                 group.create_dataset(
@@ -688,11 +682,14 @@ def main():
     parser.add_argument("--dest-no-pred", action="store_true")
     parser.add_argument("--radius", default=200, type=int)
     parser.add_argument("--test", action="store_true", help="for test use only. convert one log")
-    parser.add_argument("--num-workers", default=32, type=int)
+    parser.add_argument("--num-workers", default=128, type=int)
     parser.add_argument("--batch-size", default=1024, type=int)
     parser.add_argument("--only-agents", action="store_true")
     args = parser.parse_args()
     # fmt: on
+
+    mp.set_start_method("forkserver", force=True)  # prevent SIGTERM error
+    scenario_queue = mp.Manager().Queue()
 
     if "training" in args.dataset:
         pack_all = True  # ["agent/valid"]
@@ -726,24 +723,9 @@ def main():
         )
     else:
         data_root = os.path.join(args.data_dir, "nuplan-v1.1/splits", split)
+        # Scenario filtering is defined in get_nuplan_scenarios
         scenarios = get_nuplan_scenarios(data_root, args.map_dir)
     print(f"Found {len(scenarios)} nuplan scenarios in the dataset")
-
-    # Preprocessing: convert scenarios list to list of tuples: [(scenario, start_iter, id), ...]
-    # Use mulitprocessing, due to huge amount of scenarios in dataset
-    # Scenario ID as integer for compatibility with dataloader!
-    id = 0
-    scenario_tuples = []
-    for batch in tqdm(list(batched(scenarios, 1024))):
-        with mp.Pool(128) as pool:
-            res = pool.map(partial(get_scenario_start_iter_tuple, n_step=N_STEP), batch)
-            for list_with_tuples in res:
-                for scenario_start_iter_tuple in list_with_tuples:
-                    scenario_tuples.append((*scenario_start_iter_tuple, id))
-                    id += 1
-    print(
-        f"Converting {len(scenario_tuples)} subsampled scenarios to {args.dataset} dataset"
-    )
 
     n_pl_max = 0
     n_tl_max = 0
@@ -755,11 +737,11 @@ def main():
     # Start the writer thread
     writer_thread = mp.Process(
         target=write_to_h5_file,
-        args=(out_h5_path, SCENARIO_QUEUE, len(scenario_tuples)),
+        args=(out_h5_path, scenario_queue, len(scenarios)),
     )
     writer_thread.start()
     # Mulitprocessing the data conversion
-    for batch in tqdm(list(batched(scenario_tuples, args.batch_size))):
+    for batch in tqdm(list(batched(scenarios, args.batch_size))):
         with mp.Pool(args.num_workers) as pool:
             res = pool.map(
                 partial(
@@ -772,6 +754,7 @@ def main():
                     radius=args.radius,
                     only_agents=args.only_agents,
                     split=args.dataset,
+                    queue=scenario_queue,
                 ),
                 batch,
             )
@@ -802,5 +785,4 @@ if __name__ == "__main__":
     from functools import partial
     from more_itertools import batched
 
-    SCENARIO_QUEUE = mp.Manager().Queue()
     main()
