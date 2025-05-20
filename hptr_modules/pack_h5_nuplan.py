@@ -593,12 +593,12 @@ def convert_nuplan_scenario(
             f"scenario {scenario.log_name} has no map! map boundary is: {episode_reduced['map/boundary']}"
         )
 
-    episode_name = scenario.token
     episode_metadata = {
-        "scenario_id": episode_name,
+        "scenario_id": scenario.token,
         "scenario_center": scenario_center,
         "scenario_yaw": scenario_yaw,
         "with_map": episode_with_map,
+        "scenario_type": scenario.scenario_type,
     }
 
     return (
@@ -741,7 +741,14 @@ def main():
     )
     writer_thread.start()
     # Mulitprocessing the data conversion
+    dataset_analysis = {}
     for batch in tqdm(list(batched(scenarios, args.batch_size))):
+        for scenario in batch:
+            if scenario.scenario_type in dataset_analysis:
+                dataset_analysis[scenario.scenario_type] += 1
+            else:
+                dataset_analysis[scenario.scenario_type] = 1
+
         with mp.Pool(args.num_workers) as pool:
             res = pool.map(
                 partial(
@@ -769,6 +776,13 @@ def main():
 
     writer_thread.join()
 
+    # Print the dataset analysis
+    print("\nDataset analysis:")
+    for scenario_type, count in dataset_analysis.items():
+        print(f"    {scenario_type}: {count}")
+    print(f"Total scenarios: {len(scenarios)}\n")
+
+    print("Max number of elements in each category:")
     print(f"n_pl_max: {n_pl_max}")
     print(f"n_route_pl_max: {n_route_pl_max}")
     print(f"n_tl_max: {n_tl_max}")
