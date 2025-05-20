@@ -1,8 +1,10 @@
 from typing import Optional, Dict, Any, Tuple
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from collections import Counter
 import numpy as np
 import h5py
+from tqdm import tqdm
 
 from hptr_modules.utils.nuplan.constants import (
     N_PL_TYPE,
@@ -17,6 +19,27 @@ from hptr_modules.utils.nuplan.constants import (
 )
 
 N_AGENT_TYPE = 4
+
+
+def compute_sample_weights(filepath: str):
+    """
+    Calculate a weight for each data sample based on the class distribution.
+    The weight is inversely proportional to the number of samples in each class.
+    This is useful for handling class imbalance in the dataset.
+    :param filepath: Path to the HDF5 file.
+    :return: List of sample weights.
+    """
+    labels = []
+    with h5py.File(filepath, "r") as hf:
+        for idx in tqdm(range(len(hf)), desc="Computing sample weights", unit="sample"):
+            scenario_type = hf[str(idx)].attrs["scenario_type"]
+            labels.append(scenario_type)
+
+    label_counts = Counter(labels)
+    total = sum(label_counts.values())
+    class_weights = {cls: total / count for cls, count in label_counts.items()}
+    sample_weights = [class_weights[label] for label in labels]
+    return sample_weights
 
 
 class DatasetBase(Dataset[Dict[str, np.ndarray]]):
@@ -77,6 +100,7 @@ class DataH5nuplan(LightningDataModule):
         batch_size: int = 3,
         num_workers: int = 4,
         n_agent: int = 64,  # if not the same as h5 dataset, use dummy agents, for scalability tests.
+        use_weighted_sampler: bool = False,
     ) -> None:
         super().__init__()
         self.interactive_challenge = (
@@ -88,6 +112,7 @@ class DataH5nuplan(LightningDataModule):
         self.path_test_h5 = f"{data_dir}/{filename_test}.h5"
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.use_weighted_sampler = use_weighted_sampler
 
         n_step = N_STEP
         n_step_history = STEP_CURRENT + 1
@@ -262,6 +287,18 @@ class DataH5nuplan(LightningDataModule):
             self.test_dataset = DatasetVal(self.path_test_h5, self.tensor_size_test)
 
     def train_dataloader(self) -> DataLoader[Any]:
+        if self.use_weighted_sampler:
+            sample_weights = compute_sample_weights(self.path_train_h5)
+            sampler = WeightedRandomSampler(
+                sample_weights, num_samples=len(sample_weights), replacement=True
+            )
+            return self._get_dataloader(
+                self.train_dataset,
+                self.batch_size,
+                self.num_workers,
+                shuffle=False,
+                sampler=sampler,
+            )
         return self._get_dataloader(
             self.train_dataset, self.batch_size, self.num_workers
         )
@@ -276,14 +313,19 @@ class DataH5nuplan(LightningDataModule):
 
     @staticmethod
     def _get_dataloader(
-        ds: Dataset, batch_size: int, num_workers: int
+        ds: Dataset,
+        batch_size: int,
+        num_workers: int,
+        shuffle: Optional[any] = False,
+        sampler: Optional[Any] = None,
     ) -> DataLoader[Any]:
         return DataLoader(
             ds,
             batch_size=batch_size,
             num_workers=num_workers,
+            sampler=sampler,
             pin_memory=True,
-            shuffle=False,
+            shuffle=shuffle,
             drop_last=False,
             persistent_workers=True,
         )
