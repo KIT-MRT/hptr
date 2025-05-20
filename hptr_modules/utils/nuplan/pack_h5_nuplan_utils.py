@@ -61,6 +61,7 @@ def get_nuplan_scenarios(
         "scenario_builder.data_root={}".format(data_root),
         "scenario_builder.map_root={}".format(map_root),
         # filter
+        # Filters are applied sequentially (1. num_scenarios_per_type, 2. limit_total_scenarios. 3. timestamp_threshold_s; see _create_filter_wrappers() in nuplan-devkit)
         "scenario_filter=all_scenarios",  # simulate only one log
         "scenario_filter.remove_invalid_goals=true",
         "scenario_filter.shuffle=true",
@@ -68,10 +69,9 @@ def get_nuplan_scenarios(
         # "scenario_filter.scenario_types={}".format(all_scenario_types),
         # "scenario_filter.scenario_tokens=[]",
         # "scenario_filter.map_names=[]",
-        # "scenario_filter.num_scenarios_per_type=1",
-        "scenario_filter.limit_total_scenarios=0.05",  # standard: one data sample per time step (20Hz) -> 0.05 = 1Hz
         # "scenario_filter.expand_scenarios=true",
-        # "scenario_filter.limit_scenarios_per_type=10",  # use 10 scenarios per scenario type
+        # "scenario_filter.num_scenarios_per_type=20000",  # based on 20Hz scenario sampling: all filters below reduce number of scenarios again
+        "scenario_filter.limit_total_scenarios=0.05",  # standard: one data sample per time step (20Hz) -> 0.05 = 1Hz; further explaination in function filter_total_num_scenarios() in nuplan-devkit
         # "scenario_filter.timestamp_threshold_s=1",  # Threshold for the interval of time between scenario initial lidar timestamps in seconds
         "+scenario_filter.ego_route_radius=20",
     ]
@@ -90,7 +90,7 @@ def get_nuplan_scenarios(
     # Compose the configuration
     overrides = [
         f"group={save_dir}",
-        "worker=sequential",  #  ray_distributed
+        "worker=sequential",  # ray_distributed
         f"ego_controller={ego_controller}",
         f"observation={observation}",
         f"hydra.searchpath=[{simulation_hydra_paths.common_dir}, {simulation_hydra_paths.experiment_dir}]",
