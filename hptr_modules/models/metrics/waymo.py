@@ -36,7 +36,7 @@ class WaymoMetrics(Metric):
         self.step_gt = step_gt
         self.step_current = step_current
         self.interactive_challenge = interactive_challenge
-        self.track_future_samples = step_gt - step_current
+        self.track_future_samples = 11 # step_gt - step_current
         self.metrics_config, self.metrics_names = self._waymo_metrics_config_names(
             step_current, self.track_future_samples
         )
@@ -102,10 +102,10 @@ class WaymoMetrics(Metric):
         batch_idx = torch.arange(pred_score.shape[0])[:, None]
         agent_idx = torch.arange(pred_score.shape[1])[None, :]
         dist = torch.norm(
-            batch["agent/pos"][:, self.step_current + 1 :].unsqueeze(3) - pred_traj,
+            batch["agent/pos"][:,:(self.step_current + 1)].unsqueeze(3) - pred_traj,
             dim=-1,
         )
-        dist = dist * (batch["agent/valid"][:, self.step_current + 1 :].unsqueeze(-1))
+        dist = dist * (batch["agent/valid"][:, : (self.step_current + 1)].unsqueeze(-1))
         # brier_minADE
         min_ade, min_idx = dist.mean(1).min(-1)
         brier_minADE = min_ade + (1 - pred_score[batch_idx, agent_idx, min_idx]) ** 2
@@ -348,6 +348,13 @@ class WaymoMetrics(Metric):
             config_text += """
                 step_configurations {
                 measurement_step: 11
+                lateral_miss_threshold: 2.2
+                longitudinal_miss_threshold: 4.4
+                }"""
+        elif track_future_samples == 11:
+            config_text += """
+                step_configurations {
+                measurement_step:1
                 lateral_miss_threshold: 2.2
                 longitudinal_miss_threshold: 4.4
                 }"""

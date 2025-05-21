@@ -95,6 +95,15 @@ class SceneCentricPreProcessing(nn.Module):
         batch["ref/type"] = batch[prefix + "agent/type"]
         batch["ref/role"] = batch[prefix + "agent/role"]
 
+        # [n_scene, n_steps, n_agent]
+        valid_agents_mask = batch[prefix + "agent/valid"].permute(0,2,1) # [n_scene, n_agent, n_steps]
+        valid_agents_mask = valid_agents_mask.any(-1) # [n_scene, n_agent]
+        batch["ref/role"] = torch.zeros_like(batch[prefix + "agent/role"])
+        batch["ref/role"][:, :, 2][valid_agents_mask] = 1
+
+        valid_agents_mask = batch[prefix + "agent/role"].permute(0,2,1) # [n_scene, n_agent, n_steps]
+        invalid_agents_mask = ~valid_agents_mask[:,:,0].any(-1) # [n_scene, n_agent]
+
         last_valid_step = (
             self.step_current
             - batch[prefix + "agent/valid"][:, : self.step_current + 1]
@@ -135,6 +144,12 @@ class SceneCentricPreProcessing(nn.Module):
                     .contiguous()
                 )
 
+            batch["gt/valid"] = batch["sc/agent_valid"]
+            batch["gt/pos"] = batch["sc/agent_pos"] # TODO: check if gt has the same coordinate frame as sc, otherwise agent/pos should be used
+            batch["gt/spd"] = batch["sc/agent_spd"]
+            batch["gt/vel"] = batch["sc/agent_vel"]
+            batch["gt/yaw_bbox"] = batch["sc/agent_yaw_bbox"]
+
             if self.gt_in_local:
                 # [n_scene, n_agent, n_step_hist, 2]
                 batch["gt/pos"] = torch_pos2local(batch["gt/pos"], ref_pos, ref_rot)
@@ -143,6 +158,10 @@ class SceneCentricPreProcessing(nn.Module):
                 batch["gt/yaw_bbox"] = torch_rad2local(
                     batch["gt/yaw_bbox"], ref_yaw, cast=False
                 )
+
+            # mask out invalid sc agents
+            # [n_scene, n_agent, n_step_hist]
+            batch["sc/agent_valid"][invalid_agents_mask] = 0
 
         # ! prepare map polylines
         for k in ("valid", "type", "pos", "dir"):

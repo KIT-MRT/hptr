@@ -1,7 +1,7 @@
 _target_: hptr_modules.pl_modules.waymo_motion.WaymoMotion
 
 time_step_current: 10
-time_step_end: 90
+time_step_end: 21
 n_video_batch: 3
 interactive_challenge: False
 inference_cache_map: False
@@ -22,7 +22,7 @@ train_metric:
 
 waymo_metric:
   _target_: hptr_modules.models.metrics.waymo.WaymoMetrics
-  n_max_pred_agent: 8
+  n_max_pred_agent: 64
 
 pre_processing:
   scene_centric:
@@ -51,10 +51,11 @@ post_processing:
     std_max: 5.0
   waymo:
     _target_: hptr_modules.data_modules.waymo_post_processing.WaymoPostProcessing
-    k_pred: 6
+    k_pred: 1
     use_ade: True
     score_temperature: -1
     mpa_nms_thresh: [2.5, 1.0, 2.0] # veh, ped, cyc
+    mtr_nms_thresh: []
     gt_in_local: ${...pre_processing.scene_centric.gt_in_local}
 
 model:
@@ -83,7 +84,7 @@ model:
     n_layer_tf_agent: -1
   decoder:
     _target_: hptr_modules.models.sc_global.Decoder
-    n_pred: 6
+    n_pred: 1
     tf_n_layer: 2
     k_reinforce_tl: 2
     k_reinforce_agent: 4
@@ -108,7 +109,7 @@ model:
       flatten_conf_head: False
       out_mlp_layernorm: False
       out_mlp_batchnorm: False
-      n_step_future: 80
+      n_step_future: 11
     use_attr_for_multi_modal: False # use agent_attr instead of agent_emb for learnable latent/anchor
     use_vmap: True
 

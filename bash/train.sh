@@ -11,50 +11,26 @@
 
 trap "echo sigterm recieved, exiting!" SIGTERM
 
-DATASET_DIR="h5_womd_hptr"
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+
+DATASET_DIR="/mrtstorage/datasets_tmp/waymo_hptr"
 run () {
-python -u hptr/run.py \
-trainer=womd \
-model=scr_womd \
-datamodule=h5_womd \
-loggers.wandb.name="hptr_womd" \
-loggers.wandb.project="hptr_train" \
-loggers.wandb.entity="YOUR_ENTITY" \
-datamodule.data_dir=${TMPDIR}/datasets \
-hydra.run.dir='/cluster/scratch/zhejzhan/logs/${now:%Y-%m-%d}/${now:%H-%M-%S}'
+    python -u hptr_modules/run.py \
+    trainer.limit_train_batches=0.25 \
+    trainer.limit_val_batches=0.25 \
+    trainer=womd \
+    model=scg_womd \
+    +trainer.devices=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) \
+    +trainer.accelerator=gpu \
+    datamodule=h5_womd \
+    datamodule.batch_size=3 \
+    datamodule.n_agent=64 \
+    loggers.wandb.name="hptr_womd" \
+    loggers.wandb.project="hptr_train" \
+    loggers.wandb.entity="kit-mrt" \
+    datamodule.data_dir=$DATASET_DIR \
+    +loggers.wandb.offline=False \
+    hydra.run.dir='logs/${now:%Y-%m-%d}/${now:%H-%M-%S}'
 }
 
-# ! For AV2 dataset.
-# DATASET_DIR="h5_av2_hptr"
-# trainer=av2 \
-# model=scr_av2 \
-# datamodule=h5_av2 \
-
-# ! To resume training.
-# resume.checkpoint=YOUR_WANDB_RUN_NAME:latest \
-
-
-source /cluster/project/cvl/zhejzhan/apps/miniconda3/etc/profile.d/conda.sh
-conda activate hptr
-
-echo Running on host: `hostname`
-echo In directory: `pwd`
-echo Starting on: `date`
-
-echo START copying data: `date`
-mkdir $TMPDIR/datasets
-cp /cluster/scratch/zhejzhan/$DATASET_DIR/training.h5 $TMPDIR/datasets/
-cp /cluster/scratch/zhejzhan/$DATASET_DIR/validation.h5 $TMPDIR/datasets/
-echo DONE copying: `date`
-
-type run
-echo START: `date`
-run &
-wait
-echo DONE: `date`
-
-mkdir -p ./logs/slurm
-mv ./logs/$SLURM_JOB_ID.out ./logs/slurm/$SLURM_JOB_ID.out
-
-echo finished at: `date`
-exit 0;
+run
