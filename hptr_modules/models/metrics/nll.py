@@ -6,7 +6,7 @@ from torch import Tensor, tensor
 from torch.nn import functional as F
 from torchmetrics.metric import Metric
 from torch.distributions import MultivariateNormal
-
+from scipy.optimize import linear_sum_assignment
 
 def compute_nll_mtr(dmean: Tensor, cov: Tensor) -> Tensor:
     dx = dmean[..., 0]
@@ -267,6 +267,15 @@ class NllMetrics(Metric):
                 scale_tril=pred_cov[decoder_idx, scene_idx, agent_idx, mode_idx],
             )
             errors_pos = -gmm.log_prob(gt_pos[None, :, :, None, :, :])
+        elif self.l_pos == "hungarian":
+            errors_pos = torch.tensor(0.0, device=pred_pos.device)
+            n_decoder, n_scene, n_agent, n_pred, n_step_future, _ = pred_pos.shape
+            for i in range(n_scene):
+                errors_pos += hungarian_loss(
+                    pred_pos[0, i, :, 0].reshape(n_agent, -1),
+                    gt_pos[i].reshape(n_agent, -1),
+                )
+            errors_pos /= n_scene
         self.error_pos += (
             (errors_pos * w_pos[None, :, :, None, None]).masked_fill(~avails, 0.0).sum()
         )
@@ -332,3 +341,16 @@ class NllMetrics(Metric):
                 )
 
         return out_dict
+
+
+def match_targets(outputs, targets):
+    cost_matrix = torch.cdist(outputs, targets, p=1)
+    row_ind, col_ind = linear_sum_assignment(cost_matrix.cpu().detach().numpy())
+    return row_ind, col_ind
+
+def hungarian_loss(outputs, targets):
+    row_ind, col_ind = match_targets(outputs, targets)
+    matched_outputs = outputs[row_ind]
+    matched_targets = targets[col_ind]
+    loss = F.l1_loss(matched_outputs, matched_targets)
+    return loss
