@@ -96,13 +96,14 @@ class SceneCentricPreProcessing(nn.Module):
         batch["ref/role"] = batch[prefix + "agent/role"]
 
         # [n_scene, n_steps, n_agent]
-        valid_agents_mask = batch[prefix + "agent/valid"].permute(0,2,1) # [n_scene, n_agent, n_steps]
+        valid_agents_mask = batch[prefix + "agent/valid"][:, : self.n_step_hist].permute(0,2,1) # [n_scene, n_agent, n_steps]
         valid_agents_mask = valid_agents_mask.any(-1) # [n_scene, n_agent]
-        batch["ref/role"] = torch.zeros_like(batch[prefix + "agent/role"])
+        batch["ref/role"] = batch[prefix + "agent/role"]
         batch["ref/role"][:, :, 2][valid_agents_mask] = 1
 
-        valid_agents_mask = batch[prefix + "agent/role"].permute(0,2,1) # [n_scene, n_agent, n_steps]
-        invalid_agents_mask = ~valid_agents_mask[:,:,0].any(-1) # [n_scene, n_agent]
+        valid_agents_role_mask = batch[prefix + "agent/role"][:, :, 0].bool()  # [n_scene, n_agent]
+        invalid_agents_mask = ~valid_agents_role_mask  # [n_scene, n_agent]
+        assert valid_agents_role_mask.squeeze(-1).sum() == batch["ref/role"].shape[0], f"Invalid number of SDC: {valid_agents_role_mask.squeeze(-1).sum()}"
 
         last_valid_step = (
             self.step_current

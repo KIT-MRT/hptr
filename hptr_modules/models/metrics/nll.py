@@ -114,6 +114,11 @@ class NllMetrics(Metric):
             ref_type: [n_scene, n_agent, 3], one hot bool [veh=0, ped=1, cyc=2]
             agent_cmd: [n_scene, n_agent, 8], one hot bool
         """
+        # HACK: pred_valid is masked to 0 everywhere except the ego.
+        # Here, we want to again evaluate all predicted agents.
+        # Therefore, we set pred_valid to 1 where ref_role is 1 in last dim on last column.
+        pred_valid = ref_role[:, :, 2].bool()
+
         n_agent_type = ref_type.shape[-1]
         n_decoder, n_scene, n_agent, n_pred = pred_conf.shape
         assert (
