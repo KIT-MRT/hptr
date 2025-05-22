@@ -98,7 +98,7 @@ class SceneCentricPreProcessing(nn.Module):
         # [n_scene, n_steps, n_agent]
         valid_agents_mask = batch[prefix + "agent/valid"][:, : self.n_step_hist].permute(0,2,1) # [n_scene, n_agent, n_steps]
         valid_agents_mask = valid_agents_mask.any(-1) # [n_scene, n_agent]
-        batch["ref/role"] = batch[prefix + "agent/role"]
+        batch["ref/role"] = batch[prefix + "agent/role"].clone()
         batch["ref/role"][:, :, 2][valid_agents_mask] = 1
 
         valid_agents_role_mask = batch[prefix + "agent/role"][:, :, 0].bool()  # [n_scene, n_agent]
@@ -145,11 +145,11 @@ class SceneCentricPreProcessing(nn.Module):
                     .contiguous()
                 )
 
-            batch["gt/valid"] = batch["sc/agent_valid"]
-            batch["gt/pos"] = batch["sc/agent_pos"] # TODO: check if gt has the same coordinate frame as sc, otherwise agent/pos should be used
-            batch["gt/spd"] = batch["sc/agent_spd"]
-            batch["gt/vel"] = batch["sc/agent_vel"]
-            batch["gt/yaw_bbox"] = batch["sc/agent_yaw_bbox"]
+            batch["gt/valid"] = batch["sc/agent_valid"].clone()
+            batch["gt/pos"] = batch["sc/agent_pos"].clone() # TODO: check if gt has the same coordinate frame as sc, otherwise agent/pos should be used
+            batch["gt/spd"] = batch["sc/agent_spd"].clone()
+            batch["gt/vel"] = batch["sc/agent_vel"].clone()
+            batch["gt/yaw_bbox"] = batch["sc/agent_yaw_bbox"].clone()
 
             if self.gt_in_local:
                 # [n_scene, n_agent, n_step_hist, 2]
