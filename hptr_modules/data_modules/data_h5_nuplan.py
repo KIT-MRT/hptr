@@ -1,6 +1,8 @@
 from typing import Optional, Dict, Any, Tuple
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.distributed import get_world_size, get_rank
+from catalyst.data.sampler import DistributedSamplerWrapper
 from collections import Counter
 import numpy as np
 import h5py
@@ -291,6 +293,13 @@ class DataH5nuplan(LightningDataModule):
             sample_weights = compute_sample_weights(self.path_train_h5)
             sampler = WeightedRandomSampler(
                 sample_weights, num_samples=len(sample_weights), replacement=True
+            )
+            # Ensure that the sampler is distributed (among GPUs) if using DDP
+            sampler = DistributedSamplerWrapper(
+                sampler,
+                shuffle=True,
+                num_replicas=get_world_size(),
+                rank=get_rank(),
             )
             return self._get_dataloader(
                 self.train_dataset,
