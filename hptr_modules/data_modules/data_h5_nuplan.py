@@ -309,15 +309,17 @@ class DataH5nuplan(LightningDataModule):
                 sampler=sampler,
             )
         return self._get_dataloader(
-            self.train_dataset, self.batch_size, self.num_workers
+            self.train_dataset, self.batch_size, self.num_workers, shuffle=True
         )
 
     def val_dataloader(self) -> DataLoader[Any]:
-        return self._get_dataloader(self.val_dataset, self.batch_size, self.num_workers)
+        return self._get_dataloader(
+            self.val_dataset, self.batch_size, self.num_workers, shuffle=False
+        )
 
     def test_dataloader(self) -> DataLoader[Any]:
         return self._get_dataloader(
-            self.test_dataset, self.batch_size, self.num_workers
+            self.test_dataset, self.batch_size, self.num_workers, shuffle=False
         )
 
     @staticmethod
@@ -325,7 +327,7 @@ class DataH5nuplan(LightningDataModule):
         ds: Dataset,
         batch_size: int,
         num_workers: int,
-        shuffle: Optional[any] = False,
+        shuffle: Optional[Any] = True,
         sampler: Optional[Any] = None,
     ) -> DataLoader[Any]:
         return DataLoader(
