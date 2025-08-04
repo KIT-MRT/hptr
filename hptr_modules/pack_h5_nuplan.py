@@ -126,7 +126,7 @@ def collate_agent_features(
         if track["state"]["valid"][STEP_CURRENT] == 1 and track["type"] < 3:
             tracks_for_mining[track_token] = copy.deepcopy(track)
     track_ids_predict, track_ids_interact = mining_for_interesting_agents(
-        tracks_for_mining, n_agent_pred_challenge, n_agent_interact_challange
+        tracks_for_mining, n_agent_pred_challenge, n_agent_interact_challange, STEP_CURRENT
     )
 
     for nuplan_id, track in tracks.items():

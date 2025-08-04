@@ -396,6 +396,7 @@ def mining_for_interesting_agents(
     tracks: dict,
     n_agent_prediction_challenge: int,
     n_agent_interaction_challenge: int,
+    step_current: int,
 ) -> dict:
     """
     Here, we will mine for interesting agents to be used in the prediction and interaction challenges.
@@ -418,7 +419,7 @@ def mining_for_interesting_agents(
 
     for id, track in tracks.items():
         type = track["type"]
-        traj_score = calculate_interest_score(track)
+        traj_score = calculate_interest_score(track, step_current)
         # search for vehicles
         if type == 0:
             if id == "ego":
@@ -482,51 +483,69 @@ def mining_for_interesting_agents(
     return track_ids_predict, track_ids_interact
 
 
-def calculate_interest_score(track: dict) -> float:
+def calculate_interest_score(track: dict, step_current) -> float:
     """
-    Calculate the interest score for a trajectory based on the following metrics:
-        - Total heading change
-        - Lateral deviation
-        - Total acceleration
-        - Progress
+    Calculate the interest score for a trajectory based on the following metrics;
+    It is tried to keep the scores bounded and comparable by normalizing them with assumptions:
+        - Total heading change (assumption: max U-turn -> pi)
+        - Lateral deviation    (assumption: max lane width -> 3.5)
+        - Total acceleration   (assumption: max acceleration 1m/s^2 over 9s (89 time steps) -> 89)
+        - Progress             (assumption: max progress when 30kph -> 75)
     """
     valid = track["state"]["valid"]
     position_x = track["state"]["position_x"][valid]
     position_y = track["state"]["position_y"][valid]
+    velocity_x = track["state"]["velocity_x"][valid]
+    velocity_y = track["state"]["velocity_y"][valid]
     heading = track["state"]["heading"][valid]
+
+    n_valid_past = np.sum(valid[:step_current])
 
     # 1. Compute Euclidean distance traveled
     dx = np.diff(position_x)
     dy = np.diff(position_y)
     distances = np.sqrt(dx**2 + dy**2)
     total_progress = np.sum(distances)
+    total_progress = np.clip(total_progress / 75, 0, 1)
 
-    # 2. Compute heading changes (angle of trajectory)
-    angles = np.arctan2(dy, dx)  # Heading angle at each timestep
-    heading_changes = np.abs(np.diff(angles))  # Absolute change in heading
-    total_heading_change = np.sum(heading_changes)
+    # 2. Compute heading changes
+    # Heading values from [-pi, pi] (jump from pi to -pi)
+    heading_change = np.diff(heading)
+    heading_change = (heading_change + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+    total_heading_change = np.sum(heading_change)
+    total_heading_change = np.clip(total_heading_change / np.pi, 0, 1)
 
     # 3. Compute lateral deviations for lane changes (approximation)
     lateral_deviation = normal_distance_2d_with_angle(
         [position_x[-1], position_y[-1]], [position_x[0], position_y[0]], heading[0]
-    )  # Standard deviation of lateral movement
+    )
+    lateral_deviation = np.clip(lateral_deviation / 3.5, 0, 1)
 
     # 4. Compute acceleration changes
-    velocity_x = np.diff(position_x)  # First derivative (velocity)
-    velocity_y = np.diff(position_y)
-    acceleration_x = np.diff(velocity_x)  # Second derivative (acceleration)
-    acceleration_y = np.diff(velocity_y)
+    dt = 0.1  # trajectory time steps
+    acceleration_x = np.diff(velocity_x) / dt  # Second derivative (acceleration)
+    acceleration_y = np.diff(velocity_y) / dt
     total_acceleration = np.sum(np.sqrt(acceleration_x**2 + acceleration_y**2))
+    total_acceleration = np.clip(total_acceleration / 89, 0, 1)
 
-    # Combine scores with weights
-    interest_score = (
-        0.5 * total_heading_change  # Turning
-        + 1 * lateral_deviation  # Lane changes
-        + 2 * total_acceleration  # Acceleration/Deceleration
-        + 0.1 * total_progress  # Progress
+    # Combine metrics with weights (max: trajectory score (1) + valid past time steps (10))
+    # Based on selection process during training all interest scores should sum up to 1,
+    # s.t. a valid time step is worth more than an interesting trajectory:
+    # https://github.com/KIT-MRT/hptr/blob/1f63a4f89d58f9160123ef5352d5dc0d4131255f/hptr_modules/data_modules/agent_centric.py#L114
+    metric_weights = {"progress": 0.25, "heading_change": 0.25,
+                      "lateral_deviation": 0.25, "acceleration": 0.25}
+    assert sum(metric_weights.values()) == 1, "Metric weights should sum up to 1"
+    assert 0 <= total_progress <= 1, "Total progress should be normalized to 1"
+    assert 0 <= total_heading_change <= 1, "Total heading change should be normalized to 1"
+    assert 0 <= lateral_deviation <= 1, "Lateral deviation should be normalized to 1"
+    assert 0 <= total_acceleration <= 1, "Total acceleration should be normalized to 1"
+    trajectory_score = (
+        metric_weights["progress"] * total_progress
+        + metric_weights["heading_change"] * total_heading_change
+        + metric_weights["lateral_deviation"] * lateral_deviation
+        + metric_weights["acceleration"] * total_acceleration
     )
-
-    return interest_score
+    return trajectory_score + n_valid_past
 
 
 class FixedLengthDict:
