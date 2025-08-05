@@ -104,11 +104,11 @@ class End2EndPreProcessing(nn.Module):
 
             #     stitching order 
             #      _______________]______
-            #     |              ___  [2]\
-            #     [4]  /|    [3[|   \    |  forward
+            #     |              ___  [0]\
+            #     [6]  /|    [7]|   \    |  forward
             #     [5] | |       |    | [1]  ------>
-            #     [6]  \|    [7[|___/    |
-            #     |___________________[0]/
+            #     [4]  \|    [3]|___/    |
+            #     |___________________[2]/
             #                     ]
 
             batch["input/stitched_img"] = torch.cat(
