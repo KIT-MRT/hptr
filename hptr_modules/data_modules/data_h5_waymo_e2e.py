@@ -19,11 +19,6 @@ class DatasetBase(Dataset[Dict[str, np.ndarray]]):
 
 
 class DatasetTrain(DatasetBase):
-    """
-    The waymo 9-sec trainging.h5 is repetitive, start at {0, 2, 4, 5, 6, 8, 10} seconds within the 20-sec episode.
-    Always train with the whole training.h5 dataset.
-    limit_train_batches just for controlling the validation frequency.
-    """
 
     def __getitem__(self, idx: int) -> Dict[str, np.ndarray]:
         idx = np.random.randint(self.dataset_len)
