@@ -409,13 +409,9 @@ def mining_for_interesting_agents(
 
     The above principle is not strictly implemented, but the idea is tried to be followed.
     """
-    prediction_agents_bic = FixedLengthDict(n_agent_prediction_challenge - 1)
-    prediction_agents_ped = FixedLengthDict(n_agent_prediction_challenge - 1)
-    prediction_agents_veh = FixedLengthDict(n_agent_prediction_challenge - 1)
-
-    interact_agents_bic = FixedLengthDict(n_agent_interaction_challenge - 1)
-    interact_agents_ped = FixedLengthDict(n_agent_interaction_challenge - 1)
-    interact_agents_veh = FixedLengthDict(n_agent_interaction_challenge - 1)
+    bicycles = FixedLengthDict(n_agent_prediction_challenge - 1)
+    pedestrians = FixedLengthDict(n_agent_prediction_challenge - 1)
+    vehicles = FixedLengthDict(n_agent_prediction_challenge - 1)
 
     for id, track in tracks.items():
         type = track["type"]
@@ -425,57 +421,55 @@ def mining_for_interesting_agents(
             if id == "ego":
                 pass
             else:
-                prediction_agents_veh.add(id, traj_score)
-                interact_agents_veh.add(id, traj_score)
+                vehicles.add(id, traj_score)
         # search for pedestrians
         elif type == 1:
-            prediction_agents_ped.add(id, traj_score)
-            interact_agents_ped.add(id, traj_score)
+            pedestrians.add(id, traj_score)
         # search for ciclists
         elif type == 2:
-            prediction_agents_bic.add(id, traj_score)
-            interact_agents_bic.add(id, traj_score)
+            bicycles.add(id, traj_score)
 
     # Create list with ids of agents for prediction challenge
+    n_pedestrians_if_available = 2
+    n_bicycles_if_available = 2
     track_ids_predict = ["ego"]
-    track_ids_predict.extend(prediction_agents_bic.get_top_x_keys(2))
-    track_ids_predict.extend(prediction_agents_ped.get_top_x_keys(2))
-    len_track_ids_predict = len(track_ids_predict)
+    track_ids_predict.extend(bicycles.get_top_x_keys(2))
+    track_ids_predict.extend(pedestrians.get_top_x_keys(2))
     track_ids_predict.extend(
-        prediction_agents_veh.get_top_x_keys(
-            n_agent_prediction_challenge - len_track_ids_predict
+        vehicles.get_top_x_keys(
+            n_agent_prediction_challenge - len(track_ids_predict)
         )
     )
     # fill with pedestrians (first) and biclists (second) if necessary
     if len(track_ids_predict) < n_agent_prediction_challenge:
         track_ids_predict.extend(
-            prediction_agents_ped.get_top_x_keys(
-                n_agent_prediction_challenge - len(track_ids_predict)
-            )
+            pedestrians.get_top_x_keys(
+                n_agent_prediction_challenge - len(track_ids_predict) + n_pedestrians_if_available
+            )[n_pedestrians_if_available:]
         )
     if len(track_ids_predict) < n_agent_prediction_challenge:
         track_ids_predict.extend(
-            prediction_agents_bic.get_top_x_keys(
-                n_agent_prediction_challenge - len(track_ids_predict)
-            )
+            bicycles.get_top_x_keys(
+                n_agent_prediction_challenge - len(track_ids_predict) + n_bicycles_if_available
+            )[n_bicycles_if_available:]
         )
 
     # TODO: Get the most interactive agent for the ego vehicle
-    # Currently only the most interesting agetent is selected
+    # Currently only the most interesting agent is selected
     track_ids_interact = ["ego"]
     track_ids_interact.extend(
-        interact_agents_veh.get_top_x_keys(n_agent_interaction_challenge - 1)
+        vehicles.get_top_x_keys(n_agent_interaction_challenge - 1)
     )
-    # fill with pedestrians (first) and biclists (second) if necessary
+    # fill with pedestrians (first) and bicycles (second) if necessary
     if len(track_ids_interact) < n_agent_interaction_challenge:
         track_ids_interact.extend(
-            interact_agents_ped.get_top_x_keys(
+            pedestrians.get_top_x_keys(
                 n_agent_interaction_challenge - len(track_ids_interact)
             )
         )
     if len(track_ids_interact) < n_agent_interaction_challenge:
         track_ids_interact.extend(
-            interact_agents_bic.get_top_x_keys(
+            bicycles.get_top_x_keys(
                 n_agent_interaction_challenge - len(track_ids_interact)
             )
         )
@@ -569,8 +563,6 @@ class FixedLengthDict:
         # Sort by values in descending order and get the top x keys
         sorted_items = sorted(self.data.items(), key=lambda item: item[1], reverse=True)
         top_x_keys = [key for key, value in sorted_items[:x]]
-        for key in top_x_keys:
-            del self.data[key]
         return top_x_keys
 
     def __repr__(self):
