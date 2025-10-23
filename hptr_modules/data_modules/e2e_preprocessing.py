@@ -8,10 +8,13 @@ class End2EndPreProcessing(nn.Module):
     def __init__(
         self,
         stitch_view: bool,
+        time_step_current: int,
+        data_size: DictConfig
     ) -> None:
         super().__init__()
 
         self.stitch_view = stitch_view
+        self.model_kwargs = {"e2e_model": True}
 
     def forward(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """
@@ -125,28 +128,30 @@ class End2EndPreProcessing(nn.Module):
                 dim=1
                 )
             
-        # Ego routing intent
-        batch["input/intent"] = batch["agent/intent"]
+        # Ego routing intent one hot
+        ohe = torch.eye(3).to(batch["agent/intent"].device)
+        batch["input/intent"] = batch["input/intent"] = ohe[batch["agent/intent"]-1]
 
-        # Ego twist at current step
+        # Ego twist at current step [batch_size, 6]
         batch["input/vel"] = batch["agent/vel"]
+        # vx, vy, vz, wx, wy, wz 
 
-        # Ego history trajectory
+        # Ego history trajectory [batch_size,16, 6]
         batch["input/ego_attr"] = torch.cat(
             [
                 batch["history/agent/pos"],
                 batch["history/agent/vel"],
-                batch["history/agent/acc"],
-                batch["history/agent/pose"]
+                batch["history/agent/acc"]
             ],
-            dim=1
-        )
+            dim=-1
+        ) # x, y, vx, vy, ax, az 
 
         # Check for ground truth (only in train & val)
+        # [batch_size, 20, 2] 
         if "gt/pos" in batch:
             batch["ref/pos"] = batch["gt/pos"]
 
-        # Check for rater scores (only in val)
+        # Check for rater scores (Not available!)
         if "gt/preference_scores" in batch:
             batch["ref/preference_scores"] = batch["gt/preference_scores"]
         
